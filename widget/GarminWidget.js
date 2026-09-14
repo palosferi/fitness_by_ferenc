@@ -105,14 +105,14 @@ async function createWidget() {
   if (data) {
     const strain = data.strain_score;
     const target = data.target_strain;
-    const energy = data.body_battery;
+    const readiness = data.readiness_score;
     const sleep = data.sleep_score;
 
     addRingColumn(row, "Strain", strain, strain != null ? `${Math.round(strain)}` : "--", colorFor(strain));
     row.addSpacer();
     addRingColumn(row, "Target", target, target != null ? `${Math.round(target)}` : "--", new Color("#5b8def"));
     row.addSpacer();
-    addRingColumn(row, "Energy", energy, energy != null ? `${Math.round(energy)}` : "--", colorFor(energy));
+    addRingColumn(row, "Readiness", readiness, readiness != null ? `${Math.round(readiness)}` : "--", colorFor(readiness));
     row.addSpacer();
     addRingColumn(row, "Sleep", sleep, sleep != null ? `${Math.round(sleep)}` : "--", colorFor(sleep));
 

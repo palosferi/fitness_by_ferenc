@@ -106,7 +106,7 @@ one-tap dashboard.
 6. Edit the widget, set "Script" to the one you just created, "when interacting" to "Run Script".
 
 The widget refreshes roughly every 15 minutes (iOS controls the exact
-timing) and shows four rings - Strain, Sleep, Readiness, Steps - plus
+timing) and shows four rings - Strain, Target, Readiness, Sleep - plus
 today's training recommendation.
 
 ## Notes / things that may need tuning

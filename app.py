@@ -83,9 +83,15 @@ def dashboard():
     steps = today.get("steps")
     hrv_baseline = round(today["hrv_baseline"], 1) if today.get("hrv_baseline") else None
     sleep_hours = today.get("sleep_recommendation_hours")
+    battery = today.get("body_battery")
     charged = today.get("body_battery_charged")
     drained = today.get("body_battery_drained")
 
+    # Readiness (not Body Battery) gets the ring: it's the one Garmin-computed
+    # number that actually drives the training recommendation below. Body
+    # Battery is a live reserve gauge that answers a different question ("how
+    # much do I have left right now") - useful, but as a supporting stat, not
+    # a second big number competing with Readiness for attention.
     rings = [
         {
             "label": "Strain",
@@ -100,10 +106,10 @@ def dashboard():
             "color": "#5b8def",
         },
         {
-            "label": "Energy",
-            "display": today.get("body_battery"),
-            "pct": pct_for("score", today.get("body_battery")),
-            "color": ring_color(today.get("body_battery")),
+            "label": "Readiness",
+            "display": today.get("readiness_score"),
+            "pct": pct_for("score", today.get("readiness_score")),
+            "color": ring_color(today.get("readiness_score")),
         },
         {
             "label": "Sleep",
@@ -116,13 +122,20 @@ def dashboard():
     vo2max = today.get("vo2max")
     vo2max_date = today.get("vo2max_date")
 
+    battery_value = None
+    if battery is not None:
+        battery_value = f"{round(battery)}"
+        if charged is not None:
+            battery_value += f" (+{round(charged)} / -{round(drained)} today)"
+    elif charged is not None:
+        battery_value = f"+{round(charged)} / -{round(drained)} today"
+
     stats = [
-        {"label": "Readiness", "value": today.get("readiness_score")},
         {"label": "Steps", "value": f"{steps:,}" if steps else None},
         {"label": "Sleep target tonight", "value": f"{sleep_hours}h" if sleep_hours else None},
         {"label": "HRV", "value": f"{today['hrv_last_night']} ms (baseline {hrv_baseline})" if today.get("hrv_last_night") else None},
         {"label": "Resting HR", "value": f"{today['resting_hr']} bpm" if today.get("resting_hr") else None},
-        {"label": "Body Battery today", "value": f"+{round(charged)} / -{round(drained)}" if charged is not None else None},
+        {"label": "Body Battery", "value": battery_value},
         {"label": "Stress (avg today)", "value": round(today["stress_avg"]) if today.get("stress_avg") is not None else None},
         {"label": "Training load (ACWR)", "value": f"{round(today['acwr_percent'])}%" if today.get("acwr_percent") is not None else None},
         {"label": "VO2max", "value": f"{vo2max} (as of {vo2max_date})" if vo2max else None},
