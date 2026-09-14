@@ -1,0 +1,4 @@
+garminconnect>=0.2.24
+flask>=3.0
+python-dotenv>=1.0
+gunicorn>=22.0

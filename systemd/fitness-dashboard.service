@@ -1,0 +1,14 @@
+[Unit]
+Description=Fitness dashboard web server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/YOURUSER/fitness_by_ferenc
+EnvironmentFile=/home/YOURUSER/fitness_by_ferenc/.env
+ExecStart=/home/YOURUSER/fitness_by_ferenc/venv/bin/gunicorn -w 1 -b 0.0.0.0:8420 app:app
+Restart=on-failure
+User=YOURUSER
+
+[Install]
+WantedBy=multi-user.target

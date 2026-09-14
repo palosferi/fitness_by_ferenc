@@ -1,0 +1,11 @@
+[Unit]
+Description=Garmin fitness data sync and scoring (one-shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/YOURUSER/fitness_by_ferenc
+EnvironmentFile=/home/YOURUSER/fitness_by_ferenc/.env
+ExecStart=/home/YOURUSER/fitness_by_ferenc/venv/bin/python /home/YOURUSER/fitness_by_ferenc/sync.py
+User=YOURUSER
