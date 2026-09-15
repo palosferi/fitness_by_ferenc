@@ -24,6 +24,7 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "DASHBOARD_USER", "tester")
     monkeypatch.setattr(config, "DASHBOARD_PASSWORD", "secret")
     monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "test.db"))
+    app_module._failures.clear()
     app_module.app.config["TESTING"] = True
     return app_module.app.test_client()
 
@@ -102,6 +103,37 @@ def test_authenticated_request_reads_real_data(client, monkeypatch):
 
 
 # ---- login route ------------------------------------------------------
+
+def test_repeated_failures_lock_out_the_ip(client, monkeypatch):
+    monkeypatch.setattr(config, "AUTH_MAX_ATTEMPTS", 3)
+    for _ in range(3):
+        client.get("/api/today", headers=auth_header("tester", "wrong"))
+
+    # Correct credentials are now refused too - that's the point of a lockout.
+    resp = client.get("/api/today", headers=auth_header("tester", "secret"))
+    assert resp.get_json()["demo"] is True
+
+
+def test_lockout_expires_after_the_cooldown(client, monkeypatch):
+    monkeypatch.setattr(config, "AUTH_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(config, "AUTH_LOCKOUT_SECONDS", 0)
+    monkeypatch.setattr(
+        app_module.storage, "get_day",
+        lambda conn, day: {"strain_score": 7.0, "updated_at": datetime.now().isoformat(timespec="seconds")},
+    )
+    for _ in range(2):
+        client.get("/api/today", headers=auth_header("tester", "wrong"))
+
+    resp = client.get("/api/today", headers=auth_header("tester", "secret"))
+    assert resp.get_json()["demo"] is False
+
+
+def test_successful_login_clears_the_failure_counter(client, monkeypatch):
+    monkeypatch.setattr(config, "AUTH_MAX_ATTEMPTS", 3)
+    client.get("/api/today", headers=auth_header("tester", "wrong"))
+    client.get("/api/today", headers=auth_header("tester", "secret"))
+    assert app_module._failures == {}
+
 
 def test_login_challenges_anonymous_visitors(client):
     resp = client.get("/login")

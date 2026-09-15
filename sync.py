@@ -18,7 +18,9 @@ from garmin_client import (
     extract_body_battery,
     extract_garmin_readiness_score,
     extract_hr_series,
+    extract_respiration,
     extract_sleep_fields,
+    extract_spo2,
     extract_stress,
     extract_vo2max,
     fetch_daily_snapshot,
@@ -112,6 +114,8 @@ def run():
     stress_avg = extract_stress(snapshot["stress"])
     acwr = extract_acwr(snapshot["readiness"])
     vo2max = extract_vo2max(snapshot["vo2max_range"])
+    respiration_avg = extract_respiration(snapshot["respiration"])
+    spo2 = extract_spo2(snapshot["spo2"])
 
     storage.upsert_day(
         conn,
@@ -139,6 +143,9 @@ def run():
             "acute_load": acwr["acute_load"],
             "vo2max": vo2max["value"],
             "vo2max_date": vo2max["date"],
+            "respiration_avg": respiration_avg,
+            "spo2_avg": spo2["avg"],
+            "spo2_baseline": spo2["baseline"],
             "recommendation_type": rec["activity"],
             "recommendation_detail": rec["detail"],
             "sync_errors": ",".join(fetch_errors) if fetch_errors else None,

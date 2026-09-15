@@ -47,6 +47,9 @@ MIGRATIONS = [
     ("vo2max", "REAL"),
     ("vo2max_date", "TEXT"),
     ("sync_errors", "TEXT"),
+    ("respiration_avg", "REAL"),
+    ("spo2_avg", "REAL"),
+    ("spo2_baseline", "REAL"),
 ]
 
 

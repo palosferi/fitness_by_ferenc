@@ -46,3 +46,17 @@ BACKUP_RETENTION_DAYS = int(os.environ.get("BACKUP_RETENTION_DAYS", "30"))
 # from being public.
 DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "ferenc")
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
+
+# Brute-force throttling. Basic auth on its own lets an attacker guess as
+# fast as they can send requests, so lock an IP out after a few failures.
+AUTH_MAX_ATTEMPTS = int(os.environ.get("AUTH_MAX_ATTEMPTS", "5"))
+AUTH_LOCKOUT_SECONDS = int(os.environ.get("AUTH_LOCKOUT_SECONDS", "300"))
+
+# Path the app is served under, when it sits behind a reverse proxy at a
+# sub-path (e.g. "/fit"). Empty means it owns the domain root.
+URL_PREFIX = os.environ.get("URL_PREFIX", "").rstrip("/")
+
+# Number of reverse proxies in front of the app. Used to read the real
+# client IP from X-Forwarded-For; must match reality or the throttle above
+# either blocks everyone at once or can be spoofed.
+PROXY_HOP_COUNT = int(os.environ.get("PROXY_HOP_COUNT", "1"))

@@ -66,6 +66,8 @@ def fetch_daily_snapshot(garmin, day):
     readiness = _safe("get_training_readiness", lambda: garmin.get_training_readiness(d)) or []
     body_battery = _safe("get_body_battery", lambda: garmin.get_body_battery(d)) or []
     stress = _safe("get_stress_data", lambda: garmin.get_stress_data(d)) or {}
+    respiration = _safe("get_respiration_data", lambda: garmin.get_respiration_data(d)) or {}
+    spo2 = _safe("get_spo2_data", lambda: garmin.get_spo2_data(d)) or {}
 
     # VO2max only updates every few weeks (after a hard enough effort), so a
     # single day's lookup usually comes back empty - pull a wide window and
@@ -81,8 +83,29 @@ def fetch_daily_snapshot(garmin, day):
         "readiness": readiness,
         "body_battery": body_battery,
         "stress": stress,
+        "respiration": respiration,
+        "spo2": spo2,
         "vo2max_range": vo2_range,
         "errors": errors,
+    }
+
+
+def extract_respiration(respiration_data):
+    """Average breaths/min during sleep - the same measure Whoop's health
+    monitor reports, and the one that's stable enough night to night to be
+    worth trending (waking respiration moves with whatever you're doing).
+    """
+    return (respiration_data or {}).get("avgSleepRespirationValue")
+
+
+def extract_spo2(spo2_data):
+    """Blood oxygen during sleep. Garmin also hands back its own 7-day
+    average, so we get the baseline for free rather than deriving one.
+    """
+    data = spo2_data or {}
+    return {
+        "avg": data.get("avgSleepSpO2") or data.get("averageSpO2"),
+        "baseline": data.get("lastSevenDaysAvgSpO2"),
     }
 
 

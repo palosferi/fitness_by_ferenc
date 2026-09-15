@@ -230,7 +230,7 @@
   <div class="demo-badge">
     <strong>Demo data.</strong> These numbers are generated, not real readings &mdash;
     but they're computed by the same strain, sleep and recovery formulas the
-    real dashboard uses. <a href="/login">Sign in</a> for live data.
+    real dashboard uses. <a href="{{ url_for('dashboard.login') }}">Sign in</a> for live data.
   </div>
   {% endif %}
 
@@ -244,7 +244,7 @@
     <div class="ring-card">
       <div class="ring" style="--pct: {{ r.pct }}; --color: {{ r.color }};">
         <div class="ring-content">
-          <div class="ring-value">{{ r.display if r.display is not none else '--' }}{% if r.display is not none and r.suffix %}<span class="suffix">{{ r.suffix }}</span>{% endif %}</div>
+          <div class="ring-value">{{ r.display if r.display is not none else '--' }}</div>
         </div>
       </div>
       <div class="ring-label">{{ r.label }}</div>
