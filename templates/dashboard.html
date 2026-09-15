@@ -117,78 +117,63 @@
   .rec-detail { font-size: 16px; line-height: 1.45; }
 
   /* ---- health monitor ---- */
-  .metric { padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .summary-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .summary.good { color: #5fd39b; }
+  .summary.watch { color: #f5c97e; }
+
+  .metric { display: flex; align-items: center; gap: 13px; padding: 13px 0; border-bottom: 1px solid var(--line); }
   .metric:last-child { border-bottom: none; padding-bottom: 0; }
-  .metric:first-of-type { padding-top: 0; }
+  .metric-icon { flex: none; width: 20px; height: 20px; color: var(--muted); }
+  .metric-icon svg { width: 100%; height: 100%; display: block; }
+  .metric-body { flex: 1; min-width: 0; }
   .metric-head {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: 12px;
-    margin-bottom: 8px;
+    margin-bottom: 9px;
   }
   .metric-label { font-size: 13px; color: var(--text); }
-  .metric-value { font-size: 14px; font-weight: 600; white-space: nowrap; }
-  .metric-bar {
-    position: relative;
-    height: 4px;
-    border-radius: 2px;
-    background: linear-gradient(90deg, #2a2b30, #34363c, #2a2b30);
-  }
+  .metric-value { font-size: 14px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .metric-bar { position: relative; height: 5px; border-radius: 3px; background: #26272c; }
+  .metric-band { position: absolute; top: 0; bottom: 0; background: #33353c; border-radius: 3px; }
   .metric-marker {
     position: absolute;
     top: 50%;
-    width: 10px;
-    height: 10px;
+    width: 11px;
+    height: 11px;
     border-radius: 50%;
     border: 2px solid var(--card);
     transform: translate(-50%, -50%);
   }
-  .metric-baseline {
-    position: absolute;
-    left: 50%;
-    top: -3px;
-    bottom: -3px;
-    width: 1px;
-    background: #4a4c53;
-  }
-  .metric-foot { font-size: 11px; color: var(--muted); margin-top: 7px; }
+  .metric-foot { font-size: 11px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
   .good { background: var(--green); }
   .watch { background: var(--amber); }
   .alert { background: var(--red); }
   .unknown { background: var(--muted); }
 
   /* ---- stress ---- */
-  .stress-head {
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; }
+  .gauge { width: 100%; max-width: 260px; height: auto; display: block; }
+  .gauge-readout { text-align: center; margin-top: -26px; }
+  .gauge-value { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .gauge-label { font-size: 13px; font-weight: 600; margin-top: 5px; }
+  .gauge-scale {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 12px;
-  }
-  .stress-value { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; }
-  .stress-label { font-size: 13px; font-weight: 600; }
-  .stress-track {
-    height: 8px;
-    border-radius: 4px;
-    background: linear-gradient(90deg, var(--green) 0%, #7cc35f 25%, var(--amber) 50%, var(--red) 100%);
-    position: relative;
-    opacity: 0.85;
-  }
-  .stress-marker {
-    position: absolute;
-    top: -3px;
-    width: 3px;
-    height: 14px;
-    border-radius: 2px;
-    background: #fff;
-    transform: translateX(-50%);
-  }
-  .stress-scale {
-    display: flex;
-    justify-content: space-between;
+    width: 100%;
+    max-width: 260px;
     font-size: 10px;
     color: var(--muted);
-    margin-top: 7px;
+    margin-top: 12px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -262,27 +247,32 @@
   <div class="warning-badge">{{ warning }}</div>
   {% endif %}
 
-  <div class="card">
-    <div class="card-title">{{ recommendation_type or "Recommendation" }}</div>
-    <div class="rec-detail">{{ recommendation }}</div>
-  </div>
-
   {% if health_metrics %}
   <div class="card">
     <div class="card-title">Health Monitor</div>
+    {% if health_summary %}
+    <div class="summary {{ health_summary.status }}">
+      <span class="summary-dot {{ health_summary.status }}"></span>{{ health_summary.text }}
+    </div>
+    {% endif %}
     {% for m in health_metrics %}
     <div class="metric">
-      <div class="metric-head">
-        <span class="metric-label">{{ m.label }}</span>
-        <span class="metric-value">{{ m.value }}</span>
+      <span class="metric-icon">{% include "icons/" ~ m.icon ~ ".svg" %}</span>
+      <div class="metric-body">
+        <div class="metric-head">
+          <span class="metric-label">{{ m.label }}</span>
+          <span class="metric-value">{{ m.value }}</span>
+        </div>
+        {% if m.pct is not none %}
+        <div class="metric-bar">
+          {% if m.band_start is not none %}
+          <div class="metric-band" style="left: {{ m.band_start }}%; width: {{ m.band_width }}%;"></div>
+          {% endif %}
+          <div class="metric-marker {{ m.status }}" style="left: {{ m.pct }}%;"></div>
+        </div>
+        {% if m.delta %}<div class="metric-foot">{{ m.delta }}</div>{% endif %}
+        {% endif %}
       </div>
-      {% if m.pct is not none %}
-      <div class="metric-bar">
-        <div class="metric-baseline"></div>
-        <div class="metric-marker {{ m.status }}" style="left: {{ m.pct }}%;"></div>
-      </div>
-      {% if m.delta %}<div class="metric-foot">{{ m.delta }}</div>{% endif %}
-      {% endif %}
     </div>
     {% endfor %}
   </div>
@@ -291,18 +281,35 @@
   {% if stress %}
   <div class="card">
     <div class="card-title">Stress Monitor</div>
-    <div class="stress-head">
-      <span class="stress-value">{{ stress.value }}</span>
-      <span class="stress-label" style="color: {{ stress.color }};">{{ stress.label }}</span>
-    </div>
-    <div class="stress-track">
-      <div class="stress-marker" style="left: {{ stress.pct }}%;"></div>
-    </div>
-    <div class="stress-scale">
-      <span>Rest</span><span>Low</span><span>Medium</span><span>High</span>
+    <div class="gauge-wrap">
+      <svg class="gauge" viewBox="0 0 200 104" role="img" aria-label="Stress {{ stress.value }} of 100, {{ stress.label }}">
+        <defs>
+          <linearGradient id="stressGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#30a46c"></stop>
+            <stop offset="30%" stop-color="#7cc35f"></stop>
+            <stop offset="65%" stop-color="#f5a623"></stop>
+            <stop offset="100%" stop-color="#e5484d"></stop>
+          </linearGradient>
+        </defs>
+        <path d="M 22 90 A 78 78 0 0 1 178 90" fill="none" stroke="#26272c" stroke-width="13" stroke-linecap="round"></path>
+        <path d="M 22 90 A 78 78 0 0 1 178 90" fill="none" stroke="url(#stressGrad)" stroke-width="13"
+              stroke-linecap="round" opacity="0.9"
+              stroke-dasharray="245" stroke-dashoffset="{{ 245 - (stress.pct / 100 * 245) }}"></path>
+        <circle cx="{{ stress.marker_x }}" cy="{{ stress.marker_y }}" r="8" fill="{{ stress.color }}" stroke="#141518" stroke-width="3"></circle>
+      </svg>
+      <div class="gauge-readout">
+        <div class="gauge-value">{{ stress.value }}</div>
+        <div class="gauge-label" style="color: {{ stress.color }};">{{ stress.label }}</div>
+      </div>
+      <div class="gauge-scale"><span>Rest</span><span>Low</span><span>Medium</span><span>High</span></div>
     </div>
   </div>
   {% endif %}
+
+  <div class="card">
+    <div class="card-title">{{ recommendation_type or "Recommendation" }}</div>
+    <div class="rec-detail">{{ recommendation }}</div>
+  </div>
 
   <div class="card">
     <div class="stats">
