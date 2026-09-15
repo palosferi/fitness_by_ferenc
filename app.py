@@ -152,15 +152,18 @@ def health_metric(label, value, unit, baseline, icon, higher_is_better=True, pre
 
 
 def health_summary(metrics):
+    """Roll the rows up into the tile's one-glance verdict."""
     scored = [m for m in metrics if m["status"] != "unknown"]
     if not scored:
         return None
     in_range = sum(1 for m in scored if m["status"] == "good")
     all_good = in_range == len(scored)
     return {
-        "text": (f"All {len(scored)} metrics in your normal range" if all_good
-                 else f"{in_range} of {len(scored)} metrics in your normal range"),
         "status": "good" if all_good else "watch",
+        "status_text": "Within Range" if all_good else "Out of Range",
+        "count_text": f"{in_range}/{len(scored)} Metrics",
+        "detail_text": (f"All {len(scored)} metrics in your normal range" if all_good
+                        else f"{in_range} of {len(scored)} metrics in your normal range"),
     }
 
 
@@ -205,6 +208,15 @@ def is_stale(updated_at, stale_minutes=config.SYNC_STALE_MINUTES):
     except ValueError:
         return True
     return datetime.now() - updated > timedelta(minutes=stale_minutes)
+
+
+def format_time_only(updated_at):
+    if not updated_at:
+        return None
+    try:
+        return datetime.fromisoformat(updated_at).strftime("%H:%M")
+    except ValueError:
+        return None
 
 
 def format_synced_at(updated_at):
@@ -329,6 +341,8 @@ def dashboard():
     ) if m]
 
     stress = stress_reading(today.get("stress_avg"))
+    if stress:
+        stress["time"] = format_time_only(today.get("updated_at"))
 
     stats = [
         {"label": "Steps", "value": f"{steps:,}" if steps else None},
