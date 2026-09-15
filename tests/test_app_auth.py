@@ -189,3 +189,17 @@ def test_logout_clears_the_session(client, monkeypatch):
 
     client.post("/logout")
     assert client.get("/api/today").get_json()["demo"] is True
+
+
+# ---- duration formatting -------------------------------------------------
+
+@pytest.mark.parametrize("minutes,expected", [
+    (520, "8h40m"),
+    (480, "8h"),
+    (465, "7h45m"),
+    (605, "10h05m"),
+    (None, None),
+    (0, None),
+])
+def test_format_duration(minutes, expected):
+    assert app_module.format_duration(minutes) == expected

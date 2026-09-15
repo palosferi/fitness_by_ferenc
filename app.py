@@ -279,6 +279,15 @@ def format_gmt_as_local(gmt_timestamp):
     return local.strftime("%b %d, %H:%M")
 
 
+def format_duration(minutes):
+    """Minutes as 8h40m. Garmin reports sleep need in whole minutes, so
+    showing 8.7h threw away precision and read like a decimal clock."""
+    if not minutes:
+        return None
+    hours, mins = divmod(int(round(minutes)), 60)
+    return f"{hours}h{mins:02d}m" if mins else f"{hours}h"
+
+
 def format_time_only(updated_at):
     if not updated_at:
         return None
@@ -357,7 +366,9 @@ def dashboard():
         today = storage.get_day(conn, date.today().isoformat()) or {}
 
     steps = today.get("steps")
-    sleep_hours = today.get("sleep_recommendation_hours")
+    sleep_need = today.get("sleep_need_minutes")
+    if not sleep_need and today.get("sleep_recommendation_hours"):
+        sleep_need = today["sleep_recommendation_hours"] * 60
 
     # Garmin ships 7-day baselines for resting HR and SpO2 and a long-run
     # "balanced" range for HRV, all available from day one. Only respiration
@@ -433,7 +444,7 @@ def dashboard():
 
     stats = [
         {"label": "Steps", "value": f"{steps:,}" if steps else None},
-        {"label": "Sleep target tonight", "value": f"{sleep_hours}h" if sleep_hours else None},
+        {"label": "Sleep target tonight", "value": format_duration(sleep_need)},
     ]
 
     warning = acwr_warning_text(today.get("acwr_percent"), today.get("acwr_feedback"), today.get("acute_load"))

@@ -182,7 +182,12 @@ async function createWidget(creds) {
 
     const footerBits = [];
     if (data.steps) footerBits.push(`${Math.round(data.steps / 1000)}k steps`);
-    if (data.sleep_recommendation_hours) footerBits.push(`sleep target ${data.sleep_recommendation_hours}h`);
+    const needMin = data.sleep_need_minutes || (data.sleep_recommendation_hours || 0) * 60;
+    if (needMin) {
+      const h = Math.floor(Math.round(needMin) / 60);
+      const m = Math.round(needMin) % 60;
+      footerBits.push(`sleep target ${m ? `${h}h${String(m).padStart(2, "0")}m` : `${h}h`}`);
+    }
     if (footerBits.length) {
       widget.addSpacer(4);
       const footer = widget.addText(footerBits.join(" · "));
