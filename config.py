@@ -39,3 +39,10 @@ SYNC_STALE_MINUTES = int(os.environ.get("SYNC_STALE_MINUTES", "75"))
 
 BACKUP_DIR = os.environ.get("BACKUP_DIR", str(BASE_DIR / "backups"))
 BACKUP_RETENTION_DAYS = int(os.environ.get("BACKUP_RETENTION_DAYS", "30"))
+
+# Credentials for seeing *real* data. Anonymous visitors always get the
+# synthetic demo day instead. Fail-closed on purpose: with no password set,
+# nobody gets real data - health data should never be one config typo away
+# from being public.
+DASHBOARD_USER = os.environ.get("DASHBOARD_USER", "ferenc")
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")

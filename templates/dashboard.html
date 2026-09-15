@@ -81,6 +81,20 @@
     color: #ff8a8a;
     text-align: center;
   }
+  .demo-badge {
+    margin: 0 auto 20px;
+    padding: 12px 18px;
+    background: #16212e;
+    border: 1px solid #5b8def;
+    border-radius: 10px;
+    max-width: 480px;
+    font-size: 13px;
+    color: #a8c6f5;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .demo-badge strong { color: #cfe0fb; }
+  .demo-badge a { color: #8fb6f2; }
   .notice-badge {
     margin-top: 16px;
     padding: 10px 16px;
@@ -97,6 +111,13 @@
 </style>
 </head>
 <body>
+  {% if demo_mode %}
+  <div class="demo-badge">
+    <strong>Demo data.</strong> These numbers are generated, not real readings &mdash;
+    but they're computed by the same strain/sleep/readiness formulas the real
+    dashboard uses. <a href="/login">Sign in</a> for live data.
+  </div>
+  {% endif %}
   <h1 class="{{ 'stale' if stale else '' }}">Last synced {{ synced_at or "not yet" }}</h1>
   <div class="rings">
     {% for r in rings %}

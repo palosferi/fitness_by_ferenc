@@ -1,11 +1,29 @@
+import hmac
 from datetime import date, datetime, timedelta
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, redirect, render_template, request
 
 import config
+import demo
 import storage
 
 app = Flask(__name__)
+
+
+def is_authenticated():
+    """True only for the configured user with the right password.
+
+    Everyone else - including every anonymous visitor - gets the demo day,
+    never real data. No password configured means nobody is authenticated.
+    """
+    if not config.DASHBOARD_PASSWORD:
+        return False
+    auth = request.authorization
+    if not auth or not auth.username or auth.password is None:
+        return False
+    user_ok = hmac.compare_digest(auth.username, config.DASHBOARD_USER)
+    password_ok = hmac.compare_digest(auth.password, config.DASHBOARD_PASSWORD)
+    return user_ok and password_ok
 
 
 def ring_color(value, thresholds=(config.RING_LOW_THRESHOLD, config.RING_HIGH_THRESHOLD)):
@@ -67,18 +85,29 @@ def acwr_warning_text(percent, feedback, acute_load):
 
 @app.route("/api/today")
 def api_today():
+    if not is_authenticated():
+        payload = demo.generate_day()
+        payload["demo"] = True
+        payload["stale"] = False
+        return jsonify(payload)
+
     conn = storage.get_conn(config.DB_PATH)
     today = storage.get_day(conn, date.today().isoformat())
     if not today:
         return jsonify({"error": "no data yet"}), 404
+    today["demo"] = False
     today["stale"] = is_stale(today.get("updated_at"))
     return jsonify(today)
 
 
 @app.route("/")
 def dashboard():
-    conn = storage.get_conn(config.DB_PATH)
-    today = storage.get_day(conn, date.today().isoformat()) or {}
+    demo_mode = not is_authenticated()
+    if demo_mode:
+        today = demo.generate_day()
+    else:
+        conn = storage.get_conn(config.DB_PATH)
+        today = storage.get_day(conn, date.today().isoformat()) or {}
 
     steps = today.get("steps")
     hrv_baseline = round(today["hrv_baseline"], 1) if today.get("hrv_baseline") else None
@@ -148,12 +177,31 @@ def dashboard():
         rings=rings,
         stats=stats,
         warning=warning,
-        notice=partial_sync_text(today.get("sync_errors")),
-        stale=is_stale(today.get("updated_at")),
+        notice=None if demo_mode else partial_sync_text(today.get("sync_errors")),
+        stale=False if demo_mode else is_stale(today.get("updated_at")),
+        demo_mode=demo_mode,
         recommendation=today.get("recommendation_detail") or "No data yet today - waiting for first sync.",
         recommendation_type=today.get("recommendation_type"),
         synced_at=format_synced_at(today.get("updated_at")),
     )
+
+
+@app.route("/login")
+def login():
+    """Basic-auth entry point.
+
+    The dashboard itself never returns 401 (anonymous visitors get the demo
+    instead of a password prompt), so this is what actually triggers the
+    browser's credential dialog. Once authenticated, the browser sends the
+    header on subsequent requests and "/" starts serving real data.
+    """
+    if not is_authenticated():
+        return (
+            "Authentication required.",
+            401,
+            {"WWW-Authenticate": 'Basic realm="fitness_by_ferenc"'},
+        )
+    return redirect("/")
 
 
 if __name__ == "__main__":
