@@ -10,8 +10,10 @@
 // 4. Long-press the Home Screen -> add a Scriptable widget (Medium) -> set
 //    its "Script" to this one.
 // 5. Edit the widget (long-press -> Edit Widget) and set "When Interacting"
-//    to "Run Script", not "Open URL". That's what makes a tap open the
-//    dashboard inside Scriptable instead of kicking you out to Safari.
+//    to "Open URL", leaving the URL field blank - the script sets it. A tap
+//    then opens the dashboard straight in Safari, which closes back to the
+//    Home Screen. ("Run Script" instead routes through Scriptable, which has
+//    no way to close itself afterwards, so you end up in its script list.)
 //
 // The tile refreshes on iOS's own schedule (roughly every 10-15 min; iOS
 // budgets widget refreshes for battery and ignores any request to go
@@ -201,6 +203,19 @@ async function createWidget(creds) {
     err.textColor = new Color("#e5484d");
     row.addSpacer();
   }
+
+  // Tapping opens the dashboard in Safari rather than launching Scriptable.
+  // iOS gives no way for a script to close Scriptable afterwards (there is no
+  // API, and iOS forbids an app quitting itself), so a tap that opens it
+  // always strands you in its script list on the way back. Safari closes back
+  // to the Home Screen the way you'd expect - and works now only because the
+  // session cookie survives, so the page loads with real data.
+  //
+  // The exception is having no stored credentials: then the tap re-runs this
+  // script so it can prompt, since Safari couldn't.
+  widget.url = creds
+    ? `${SERVER_URL}/`
+    : `scriptable:///run?scriptName=${encodeURIComponent(Script.name())}`;
 
   widget.refreshAfterDate = new Date(Date.now() + 10 * 60 * 1000);
   return widget;
