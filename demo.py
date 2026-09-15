@@ -69,6 +69,7 @@ def generate_day(day=None):
     return {
         "date": day.date().isoformat(),
         "resting_hr": resting_hr,
+        "resting_hr_baseline": DEMO_RESTING_HR_BASELINE,
         "max_hr": DEMO_MAX_HR,
         "hrv_last_night": hrv_last_night,
         "hrv_baseline": hrv_baseline,

@@ -103,18 +103,16 @@ async function createWidget() {
   row.centerAlignContent();
 
   if (data) {
-    const strain = data.strain_score;
-    const target = data.target_strain;
-    const readiness = data.readiness_score;
+    const recovery = data.readiness_score;
     const sleep = data.sleep_score;
+    const strain = data.strain_score;
 
-    addRingColumn(row, "Strain", strain, strain != null ? `${Math.round(strain)}` : "--", colorFor(strain));
+    // Same three as the dashboard, same order: Recovery, Sleep, Day Strain.
+    addRingColumn(row, "Recovery", recovery, recovery != null ? `${Math.round(recovery)}` : "--", colorFor(recovery, [34, 67]), 70);
     row.addSpacer();
-    addRingColumn(row, "Target", target, target != null ? `${Math.round(target)}` : "--", new Color("#5b8def"));
+    addRingColumn(row, "Sleep", sleep, sleep != null ? `${Math.round(sleep)}` : "--", colorFor(sleep, [34, 67]), 70);
     row.addSpacer();
-    addRingColumn(row, "Readiness", readiness, readiness != null ? `${Math.round(readiness)}` : "--", colorFor(readiness));
-    row.addSpacer();
-    addRingColumn(row, "Sleep", sleep, sleep != null ? `${Math.round(sleep)}` : "--", colorFor(sleep));
+    addRingColumn(row, "Strain", strain, strain != null ? `${Math.round(strain)}` : "--", new Color("#5b8def"), 70);
 
     widget.addSpacer(8);
     const rec = widget.addText(data.recommendation_detail || "");
