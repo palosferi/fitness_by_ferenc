@@ -9,11 +9,20 @@
 //    match DASHBOARD_USER in the server's .env exactly.
 // 4. Long-press the Home Screen -> add a Scriptable widget (Medium) -> set
 //    its "Script" to this one.
-// 5. Edit the widget (long-press -> Edit Widget) and set "When Interacting"
-//    to "Open URL", leaving the URL field blank - the script sets it. A tap
-//    then opens the dashboard straight in Safari, which closes back to the
-//    Home Screen. ("Run Script" instead routes through Scriptable, which has
-//    no way to close itself afterwards, so you end up in its script list.)
+// 5. Edit the widget (long-press -> Edit Widget):
+//      When Interacting : Open URL
+//      URL              : https://ferencpalos.is-a.dev/fit/
+//    Put the URL in that field - this script deliberately does NOT set
+//    widget.url. Setting both makes the tap fire twice: Scriptable opens for
+//    the script's URL and the browser opens for the field's, leaving two apps
+//    to close. One mechanism only.
+//
+//    "Run Script" is the other option, but avoid it: it routes the tap
+//    through Scriptable, and iOS gives no way for a script to close the app
+//    afterwards, so you land in its script list on the way back.
+//
+//    If the keychain ever loses your credentials, open this script manually
+//    in Scriptable to be prompted again.
 //
 // The tile refreshes on iOS's own schedule (roughly every 10-15 min; iOS
 // budgets widget refreshes for battery and ignores any request to go
@@ -203,19 +212,6 @@ async function createWidget(creds) {
     err.textColor = new Color("#e5484d");
     row.addSpacer();
   }
-
-  // Tapping opens the dashboard in Safari rather than launching Scriptable.
-  // iOS gives no way for a script to close Scriptable afterwards (there is no
-  // API, and iOS forbids an app quitting itself), so a tap that opens it
-  // always strands you in its script list on the way back. Safari closes back
-  // to the Home Screen the way you'd expect - and works now only because the
-  // session cookie survives, so the page loads with real data.
-  //
-  // The exception is having no stored credentials: then the tap re-runs this
-  // script so it can prompt, since Safari couldn't.
-  widget.url = creds
-    ? `${SERVER_URL}/`
-    : `scriptable:///run?scriptName=${encodeURIComponent(Script.name())}`;
 
   widget.refreshAfterDate = new Date(Date.now() + 10 * 60 * 1000);
   return widget;
