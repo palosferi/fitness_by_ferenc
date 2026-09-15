@@ -50,6 +50,11 @@ MIGRATIONS = [
     ("respiration_avg", "REAL"),
     ("spo2_avg", "REAL"),
     ("spo2_baseline", "REAL"),
+    ("resting_hr_baseline", "REAL"),
+    ("hrv_balanced_low", "REAL"),
+    ("hrv_balanced_high", "REAL"),
+    ("sleep_need_minutes", "REAL"),
+    ("watch_synced_at", "TEXT"),
 ]
 
 

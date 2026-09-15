@@ -134,11 +134,15 @@ HEALTH_NORMAL_BAND = 0.07
 HEALTH_WATCH_BAND = 0.15
 
 
-def health_metric(label, value, unit, baseline, icon, higher_is_better=True, precision=0):
-    """One Health Monitor row: today's value against your own baseline.
+def health_metric(label, value, unit, baseline, icon, higher_is_better=True,
+                  precision=0, normal_range=None):
+    """One Health Monitor row: today's value against what's normal for you.
 
-    Direction matters - HRV above baseline is a good sign, resting HR above
-    baseline is not - so `higher_is_better` decides which way is "green".
+    `normal_range` (low, high) is preferred when the source gives a real
+    band - Garmin's HRV "balanced" range, say - because a band is what
+    "normal for you" actually is. Falling back to a single baseline, the
+    direction matters: HRV above baseline is a good sign, resting HR above
+    baseline is not, which is what `higher_is_better` decides.
     """
     if value is None:
         return None
@@ -147,6 +151,19 @@ def health_metric(label, value, unit, baseline, icon, higher_is_better=True, pre
     formatted = f"{shown}{unit}" if unit == "%" else f"{shown} {unit}".strip()
     entry = {"label": label, "value": formatted, "icon": icon, "pct": None,
              "status": "unknown", "delta": None, "band_start": None, "band_width": None}
+
+    if normal_range and normal_range[0] is not None and normal_range[1] is not None:
+        low, high = normal_range
+        span = max(high - low, 1)
+        # Show the band with a quarter-span of headroom on either side.
+        axis_low, axis_high = low - span * 0.25, high + span * 0.25
+        axis_span = axis_high - axis_low
+        entry["pct"] = max(0, min(100, (value - axis_low) / axis_span * 100))
+        entry["band_start"] = (low - axis_low) / axis_span * 100
+        entry["band_width"] = span / axis_span * 100
+        entry["status"] = "good" if low <= value <= high else "watch"
+        entry["delta"] = f"normal range {round(low)}-{round(high)}"
+        return entry
 
     if not baseline:
         return entry
@@ -182,12 +199,17 @@ def health_summary(metrics):
         return None
     in_range = sum(1 for m in scored if m["status"] == "good")
     all_good = in_range == len(scored)
+    # Only metrics with a baseline can be judged; the rest are shown but not
+    # scored, so say "of N tracked" rather than implying N is all of them.
+    tracked = len(scored)
+    untracked = len(metrics) - tracked
+    suffix = f" ({untracked} without a baseline yet)" if untracked else ""
     return {
         "status": "good" if all_good else "watch",
         "status_text": "Within Range" if all_good else "Out of Range",
-        "count_text": f"{in_range}/{len(scored)} Metrics",
-        "detail_text": (f"All {len(scored)} metrics in your normal range" if all_good
-                        else f"{in_range} of {len(scored)} metrics in your normal range"),
+        "count_text": f"{in_range}/{tracked} tracked",
+        "detail_text": ((f"All {tracked} tracked metrics in your normal range" if all_good
+                         else f"{in_range} of {tracked} tracked metrics in your normal range") + suffix),
     }
 
 
@@ -314,13 +336,16 @@ def dashboard():
     steps = today.get("steps")
     sleep_hours = today.get("sleep_recommendation_hours")
 
-    # HRV and SpO2 arrive with Garmin's own baselines; resting HR and
-    # respiration don't, so derive those from the last week of our own rows.
+    # Garmin ships 7-day baselines for resting HR and SpO2 and a long-run
+    # "balanced" range for HRV, all available from day one. Only respiration
+    # has none, so that falls back to our own rows - which stays empty until
+    # there's a week of them.
     resting_hr_baseline = today.get("resting_hr_baseline")
-    if resting_hr_baseline is None and not demo_mode:
+    if not demo_mode and today.get("respiration_baseline") is None:
         history = storage.get_recent_days(conn, date.today().isoformat(), limit=7)
-        resting_hr_baseline = _mean_of(history, "resting_hr")
         today["respiration_baseline"] = _mean_of(history, "respiration_avg")
+        if resting_hr_baseline is None:
+            resting_hr_baseline = _mean_of(history, "resting_hr")
 
     # Three rings, Whoop's three: Recovery, Sleep, Strain. Target was dropped
     # because recommend_training() sets it equal to readiness on most days, so
@@ -355,7 +380,8 @@ def dashboard():
         health_metric("Resting heart rate", today.get("resting_hr"), "bpm",
                       resting_hr_baseline, "heart", higher_is_better=False),
         health_metric("Heart rate variability", today.get("hrv_last_night"), "ms",
-                      today.get("hrv_baseline"), "pulse", higher_is_better=True),
+                      today.get("hrv_baseline"), "pulse", higher_is_better=True,
+                      normal_range=(today.get("hrv_balanced_low"), today.get("hrv_balanced_high"))),
         health_metric("Respiratory rate", today.get("respiration_avg"), "rpm",
                       today.get("respiration_baseline"), "lungs",
                       higher_is_better=False, precision=1),
@@ -389,6 +415,7 @@ def dashboard():
         recommendation=today.get("recommendation_detail") or "No data yet today - waiting for first sync.",
         recommendation_type=today.get("recommendation_type"),
         synced_at=format_synced_at(today.get("updated_at")),
+        watch_synced_at=format_synced_at(today.get("watch_synced_at")),
     )
 
 

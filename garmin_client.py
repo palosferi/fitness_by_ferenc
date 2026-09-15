@@ -139,6 +139,45 @@ def extract_acwr(readiness_entries):
     }
 
 
+def extract_watch_sync(stats):
+    """When the *watch* last uploaded to Garmin - not when we last fetched.
+
+    These differ by hours: the watch pushes to Garmin Connect periodically,
+    so our sync can be minutes old while the numbers in it are stale.
+    """
+    return (stats or {}).get("lastSyncTimestampGMT")
+
+
+def extract_resting_hr_baseline(stats):
+    """Garmin's own 7-day resting HR average - available from day one, unlike
+    a baseline derived from however many rows we happen to have stored."""
+    return (stats or {}).get("lastSevenDaysAvgRestingHeartRate")
+
+
+def extract_hrv_balanced_range(hrv_data):
+    """Garmin's "balanced" HRV range - the band it considers normal for you.
+
+    This is the right baseline to compare against. hrvSummary.weeklyAvg is a
+    rolling 7-day mean, which chases recent values: a week of illness drags
+    it down until a genuinely depressed HRV looks "on baseline". The balanced
+    range is built from a much longer history and stays put.
+    """
+    summary = (hrv_data or {}).get("hrvSummary") or {}
+    baseline = summary.get("baseline") or {}
+    low, high = baseline.get("balancedLow"), baseline.get("balancedUpper")
+    if low is None or high is None:
+        return {"low": None, "high": None}
+    return {"low": low, "high": high}
+
+
+def extract_sleep_need(sleep):
+    """Garmin's own sleep target in minutes, already adjusted for sleep debt
+    and HRV - the number the watch shows. Its own formula beats ours."""
+    dto = (sleep or {}).get("dailySleepDTO") or {}
+    need = dto.get("sleepNeed") or {}
+    return need.get("actual") or need.get("baseline")
+
+
 def extract_stress(stress_data):
     return (stress_data or {}).get("avgStressLevel")
 

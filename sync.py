@@ -18,11 +18,15 @@ from garmin_client import (
     extract_body_battery,
     extract_garmin_readiness_score,
     extract_hr_series,
+    extract_hrv_balanced_range,
     extract_respiration,
+    extract_resting_hr_baseline,
+    extract_sleep_need,
     extract_sleep_fields,
     extract_spo2,
     extract_stress,
     extract_vo2max,
+    extract_watch_sync,
     fetch_daily_snapshot,
     get_client,
 )
@@ -107,8 +111,16 @@ def run():
 
     rec = recommend_training(readiness, yesterday_strain, recent_rest_count, config.USER_EASY_PACE_MIN_PER_KM)
 
-    recent_sleep_durations = [h["sleep_duration_min"] for h in history[:3] if h.get("sleep_duration_min")]
-    sleep_hours_rec = recommend_sleep_hours(strain_score, recent_sleep_durations)
+    hrv_range = extract_hrv_balanced_range(snapshot["hrv"])
+    resting_hr_baseline_garmin = extract_resting_hr_baseline(stats)
+    watch_synced_at = extract_watch_sync(stats)
+    sleep_need_minutes = extract_sleep_need(snapshot["sleep"])
+
+    if sleep_need_minutes:
+        sleep_hours_rec = round(sleep_need_minutes / 60, 1)
+    else:
+        recent_sleep_durations = [h["sleep_duration_min"] for h in history[:3] if h.get("sleep_duration_min")]
+        sleep_hours_rec = recommend_sleep_hours(strain_score, recent_sleep_durations)
 
     body_battery = extract_body_battery(snapshot["body_battery"])
     stress_avg = extract_stress(snapshot["stress"])
@@ -144,6 +156,11 @@ def run():
             "vo2max": vo2max["value"],
             "vo2max_date": vo2max["date"],
             "respiration_avg": respiration_avg,
+            "resting_hr_baseline": resting_hr_baseline_garmin,
+            "hrv_balanced_low": hrv_range["low"],
+            "hrv_balanced_high": hrv_range["high"],
+            "sleep_need_minutes": sleep_need_minutes,
+            "watch_synced_at": watch_synced_at,
             "spo2_avg": spo2["avg"],
             "spo2_baseline": spo2["baseline"],
             "recommendation_type": rec["activity"],

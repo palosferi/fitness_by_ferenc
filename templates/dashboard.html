@@ -283,7 +283,9 @@
   <div class="topline">
     <span>Today</span>
     <span class="topline-right">
-      <span class="{{ 'stale' if stale else '' }}">{{ synced_at or "not synced yet" }}</span>
+      <span class="{{ 'stale' if stale else '' }}" title="When your watch last uploaded to Garmin">
+        {% if watch_synced_at %}watch {{ watch_synced_at }}{% else %}{{ synced_at or "not synced yet" }}{% endif %}
+      </span>
       {% if not demo_mode %}
       <form method="post" action="{{ url_for('dashboard.logout') }}">
         <button type="submit" class="linkish">Sign out</button>
