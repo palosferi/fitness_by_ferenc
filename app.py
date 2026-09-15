@@ -219,6 +219,16 @@ STRESS_BANDS = ((25, "Rest", "#30a46c"), (50, "Low", "#7cc35f"),
                 (75, "Medium", "#f5a623"), (101, "High", "#e5484d"))
 
 
+def format_iso_as_local(timestamp):
+    """Parse an offset-aware ISO timestamp and render it in local time."""
+    if not timestamp:
+        return None
+    try:
+        return datetime.fromisoformat(timestamp).astimezone().strftime("%H:%M")
+    except ValueError:
+        return None
+
+
 def stress_reading(value):
     """Reading plus the marker's x/y on a semicircular gauge.
 
@@ -403,9 +413,23 @@ def dashboard():
         health_metric("VO2 max", today.get("vo2max"), "", None, "gauge"),
     ) if m]
 
-    stress = stress_reading(today.get("stress_avg"))
-    if stress:
-        stress["time"] = format_time_only(today.get("updated_at"))
+    # The gauge shows the most recent actual reading, timestamped with when
+    # Garmin took it - not the day average stamped with our fetch time, which
+    # read as a live measurement it wasn't.
+    stress = stress_reading(today.get("stress_latest"))
+    if stress is None:
+        stress = stress_reading(today.get("stress_avg"))
+        if stress:
+            stress["time"] = None
+            stress["caption"] = "day average"
+    else:
+        stress["time"] = format_iso_as_local(today.get("stress_latest_at"))
+        parts = []
+        if today.get("stress_avg") is not None:
+            parts.append(f"avg {round(today['stress_avg'])}")
+        if today.get("stress_max") is not None:
+            parts.append(f"peak {round(today['stress_max'])}")
+        stress["caption"] = " · ".join(parts) if parts else None
 
     stats = [
         {"label": "Steps", "value": f"{steps:,}" if steps else None},

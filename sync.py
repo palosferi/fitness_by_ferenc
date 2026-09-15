@@ -123,7 +123,8 @@ def run():
         sleep_hours_rec = recommend_sleep_hours(strain_score, recent_sleep_durations)
 
     body_battery = extract_body_battery(snapshot["body_battery"])
-    stress_avg = extract_stress(snapshot["stress"])
+    stress = extract_stress(snapshot["stress"])
+    stress_avg = stress["avg"]
     acwr = extract_acwr(snapshot["readiness"])
     vo2max = extract_vo2max(snapshot["vo2max_range"])
     respiration_avg = extract_respiration(snapshot["respiration"])
@@ -150,6 +151,9 @@ def run():
             "body_battery_charged": body_battery["charged"],
             "body_battery_drained": body_battery["drained"],
             "stress_avg": stress_avg,
+            "stress_latest": stress["latest"],
+            "stress_latest_at": stress["latest_at"],
+            "stress_max": stress["max"],
             "acwr_percent": acwr["percent"],
             "acwr_feedback": acwr["feedback"],
             "acute_load": acwr["acute_load"],

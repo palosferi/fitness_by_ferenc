@@ -55,6 +55,9 @@ MIGRATIONS = [
     ("hrv_balanced_high", "REAL"),
     ("sleep_need_minutes", "REAL"),
     ("watch_synced_at", "TEXT"),
+    ("stress_latest", "REAL"),
+    ("stress_latest_at", "TEXT"),
+    ("stress_max", "REAL"),
 ]
 
 

@@ -11,7 +11,7 @@ of hanging) when run non-interactively (e.g. from the systemd timer).
 
 import logging
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from garminconnect import Garmin
 
@@ -179,7 +179,29 @@ def extract_sleep_need(sleep):
 
 
 def extract_stress(stress_data):
-    return (stress_data or {}).get("avgStressLevel")
+    """Day average and max, plus the most recent actual reading and when it
+    was taken.
+
+    The intraday array is what makes an honest "right now" tile possible:
+    the day average stamped with our fetch time reads as a live measurement
+    it isn't. Negative values mark stretches Garmin couldn't measure (during
+    activity, or the watch off the wrist), so they're skipped.
+    """
+    data = stress_data or {}
+    result = {
+        "avg": data.get("avgStressLevel"),
+        "max": data.get("maxStressLevel"),
+        "latest": None,
+        "latest_at": None,
+    }
+    for entry in reversed(data.get("stressValuesArray") or []):
+        if len(entry) > 1 and entry[1] is not None and entry[1] >= 0:
+            result["latest"] = entry[1]
+            result["latest_at"] = datetime.fromtimestamp(
+                entry[0] / 1000, tz=timezone.utc
+            ).isoformat()
+            break
+    return result
 
 
 def extract_vo2max(vo2max_range):

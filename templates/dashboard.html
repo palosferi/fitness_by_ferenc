@@ -227,6 +227,7 @@
   .gauge-readout { text-align: center; margin-top: -26px; }
   .gauge-value { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
   .gauge-label { font-size: 13px; font-weight: 600; margin-top: 5px; }
+  .gauge-caption { font-size: 11px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
   .gauge-scale {
     display: flex;
     justify-content: space-between;
@@ -404,6 +405,7 @@
       <div class="gauge-readout">
         <div class="gauge-value">{{ stress.value }}</div>
         <div class="gauge-label" style="color: {{ stress.color }};">{{ stress.label }}</div>
+        {% if stress.caption %}<div class="gauge-caption">{{ stress.caption }}</div>{% endif %}
       </div>
       <div class="gauge-scale"><span>Rest</span><span>Low</span><span>Medium</span><span>High</span></div>
     </div>
