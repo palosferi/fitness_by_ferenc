@@ -52,6 +52,13 @@ DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
 AUTH_MAX_ATTEMPTS = int(os.environ.get("AUTH_MAX_ATTEMPTS", "5"))
 AUTH_LOCKOUT_SECONDS = int(os.environ.get("AUTH_LOCKOUT_SECONDS", "300"))
 
+# Signs the login session cookie. Left unset it's derived from the password,
+# which keeps sessions valid across restarts with no extra config - and
+# invalidates every session when you change the password, which is what you'd
+# want anyway.
+DASHBOARD_SECRET_KEY = os.environ.get("DASHBOARD_SECRET_KEY")
+SESSION_DAYS = int(os.environ.get("SESSION_DAYS", "30"))
+
 # Path the app is served under, when it sits behind a reverse proxy at a
 # sub-path (e.g. "/fit"). Empty means it owns the domain root.
 URL_PREFIX = os.environ.get("URL_PREFIX", "").rstrip("/")

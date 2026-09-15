@@ -3,9 +3,10 @@
 // Setup
 // 1. Install the free "Scriptable" app from the App Store.
 // 2. Create a new script, paste this whole file in.
-// 3. Run it once inside Scriptable. It'll prompt for your dashboard password
-//    and store it in the iOS keychain - it is NOT saved in this script, so
-//    the script stays safe to share or screenshot.
+// 3. Run it once inside Scriptable. It'll prompt for your dashboard username
+//    and password and store them in the iOS keychain - they are NOT saved in
+//    this script, so it stays safe to share or screenshot. The username must
+//    match DASHBOARD_USER in the server's .env exactly.
 // 4. Long-press the Home Screen -> add a Scriptable widget (Medium) -> set
 //    its "Script" to this one.
 // 5. Edit the widget (long-press -> Edit Widget) and set "When Interacting"
@@ -17,41 +18,49 @@
 // faster). Tapping always fetches fresh.
 
 const SERVER_URL = "https://ferencpalos.is-a.dev/fit";
-const USERNAME = "ferenc";
-const KEYCHAIN_KEY = "fitness_by_ferenc_password";
+const KEYCHAIN_USER = "fitness_by_ferenc_user";
+const KEYCHAIN_PASS = "fitness_by_ferenc_password";
 
 // ---------------------------------------------------------------- auth
 
-async function getPassword() {
-  if (Keychain.contains(KEYCHAIN_KEY)) return Keychain.get(KEYCHAIN_KEY);
+// Both are prompted for and kept in the keychain - the username must match
+// DASHBOARD_USER on the server exactly, so it is asked for rather than
+// assumed.
+async function getCredentials() {
+  if (Keychain.contains(KEYCHAIN_USER) && Keychain.contains(KEYCHAIN_PASS)) {
+    return { user: Keychain.get(KEYCHAIN_USER), password: Keychain.get(KEYCHAIN_PASS) };
+  }
   // Widgets can't show prompts, so only ask when running inside the app.
   if (!config.runsInWidget) {
     const alert = new Alert();
-    alert.title = "Dashboard password";
-    alert.message = "Stored in the iOS keychain, not in the script.";
+    alert.title = "Dashboard sign in";
+    alert.message = "Stored in the iOS keychain, not in this script.";
+    alert.addTextField("Username", Keychain.contains(KEYCHAIN_USER) ? Keychain.get(KEYCHAIN_USER) : "");
     alert.addSecureTextField("Password", "");
     alert.addAction("Save");
     alert.addCancelAction("Cancel");
     if ((await alert.present()) === 0) {
-      const value = alert.textFieldValue(0);
-      if (value) {
-        Keychain.set(KEYCHAIN_KEY, value);
-        return value;
+      const user = alert.textFieldValue(0);
+      const password = alert.textFieldValue(1);
+      if (user && password) {
+        Keychain.set(KEYCHAIN_USER, user);
+        Keychain.set(KEYCHAIN_PASS, password);
+        return { user, password };
       }
     }
   }
   return null;
 }
 
-function authHeaders(password) {
-  if (!password) return {};
-  const token = Data.fromString(`${USERNAME}:${password}`).toBase64String();
+function authHeaders(creds) {
+  if (!creds) return {};
+  const token = Data.fromString(`${creds.user}:${creds.password}`).toBase64String();
   return { Authorization: `Basic ${token}` };
 }
 
-async function fetchToday(password) {
+async function fetchToday(creds) {
   const req = new Request(`${SERVER_URL}/api/today`);
-  req.headers = authHeaders(password);
+  req.headers = authHeaders(creds);
   req.timeoutInterval = 8;
   try {
     return await req.loadJSON();
@@ -122,8 +131,8 @@ function addRingColumn(stack, label, pct, displayText, color, size = 70) {
 
 // ---------------------------------------------------------------- widget
 
-async function createWidget(password) {
-  const data = await fetchToday(password);
+async function createWidget(creds) {
+  const data = await fetchToday(creds);
   const widget = new ListWidget();
   widget.backgroundColor = new Color("#0a0a0b");
   widget.setPadding(12, 12, 12, 12);
@@ -137,7 +146,7 @@ async function createWidget(password) {
     heading = "No data";
     headingColor = new Color("#e5484d");
   } else if (demo) {
-    heading = "Tap to sign in";
+    heading = creds ? "Wrong credentials - tap" : "Tap to sign in";
     headingColor = new Color("#5b8def");
   } else if (stale) {
     heading = "Today (stale)";
@@ -194,7 +203,7 @@ async function createWidget(password) {
 
 // ---------------------------------------------------------------- in-app
 
-async function presentDashboard(password) {
+async function presentDashboard(creds) {
   const webView = new WebView();
 
   // Fetch the page ourselves so the auth header goes with it, then hand the
@@ -202,7 +211,7 @@ async function presentDashboard(password) {
   // show the public demo page instead of real numbers. The page is fully
   // self-contained (inline CSS and SVG), so nothing else needs fetching.
   const req = new Request(`${SERVER_URL}/`);
-  req.headers = authHeaders(password);
+  req.headers = authHeaders(creds);
   req.timeoutInterval = 10;
 
   try {
@@ -220,11 +229,11 @@ async function presentDashboard(password) {
 
 // ---------------------------------------------------------------- entry
 
-const password = await getPassword();
+const creds = await getCredentials();
 
 if (config.runsInWidget) {
-  Script.setWidget(await createWidget(password));
+  Script.setWidget(await createWidget(creds));
 } else {
-  await presentDashboard(password);
+  await presentDashboard(creds);
 }
 Script.complete();

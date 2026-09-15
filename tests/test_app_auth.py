@@ -135,12 +135,57 @@ def test_successful_login_clears_the_failure_counter(client, monkeypatch):
     assert app_module._failures == {}
 
 
-def test_login_challenges_anonymous_visitors(client):
+def test_login_shows_a_form_not_a_401_challenge(client):
+    # A 401 challenge never prompts inside iOS webviews - it just renders the
+    # error body - so anonymous visitors must get a real form instead.
     resp = client.get("/login")
-    assert resp.status_code == 401
-    assert "Basic" in resp.headers["WWW-Authenticate"]
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "<form" in body and 'name="password"' in body
+    assert "WWW-Authenticate" not in resp.headers
 
 
 def test_login_redirects_once_authenticated(client):
     resp = client.get("/login", headers=auth_header("tester", "secret"))
     assert resp.status_code == 302
+
+
+def test_form_login_grants_a_session(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module.storage, "get_day",
+        lambda conn, day: {"strain_score": 21.0, "updated_at": datetime.now().isoformat(timespec="seconds")},
+    )
+    resp = client.post("/login", data={"username": "tester", "password": "secret"})
+    assert resp.status_code == 302
+
+    # The cookie alone now unlocks real data - no basic auth header needed.
+    payload = client.get("/api/today").get_json()
+    assert payload["demo"] is False
+    assert payload["strain_score"] == 21.0
+
+
+def test_form_login_rejects_wrong_password(client):
+    resp = client.post("/login", data={"username": "tester", "password": "nope"})
+    assert resp.status_code == 401
+    assert "Wrong username or password" in resp.get_data(as_text=True)
+    assert client.get("/api/today").get_json()["demo"] is True
+
+
+def test_form_login_reports_lockout(client, monkeypatch):
+    monkeypatch.setattr(config, "AUTH_MAX_ATTEMPTS", 2)
+    for _ in range(2):
+        client.post("/login", data={"username": "tester", "password": "nope"})
+    resp = client.post("/login", data={"username": "tester", "password": "secret"})
+    assert "Too many attempts" in resp.get_data(as_text=True)
+
+
+def test_logout_clears_the_session(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module.storage, "get_day",
+        lambda conn, day: {"strain_score": 21.0, "updated_at": datetime.now().isoformat(timespec="seconds")},
+    )
+    client.post("/login", data={"username": "tester", "password": "secret"})
+    assert client.get("/api/today").get_json()["demo"] is False
+
+    client.post("/logout")
+    assert client.get("/api/today").get_json()["demo"] is True

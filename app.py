@@ -1,11 +1,14 @@
+import hashlib
 import hmac
 import logging
 import math
+import os
 import time
 from datetime import date, datetime, timedelta
 from threading import Lock
 
-from flask import Blueprint, Flask, jsonify, redirect, render_template, request, url_for
+from flask import (Blueprint, Flask, jsonify, redirect, render_template, request,
+                   session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
@@ -23,6 +26,14 @@ app = Flask(__name__)
 # could spoof X-Forwarded-For and dodge the throttle.
 if config.PROXY_HOP_COUNT:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=config.PROXY_HOP_COUNT, x_proto=config.PROXY_HOP_COUNT)
+
+if config.DASHBOARD_SECRET_KEY:
+    app.secret_key = config.DASHBOARD_SECRET_KEY
+elif config.DASHBOARD_PASSWORD:
+    app.secret_key = hashlib.sha256(f"fbf:{config.DASHBOARD_PASSWORD}".encode()).hexdigest()
+else:
+    app.secret_key = os.urandom(32)  # nobody can authenticate anyway
+app.permanent_session_lifetime = timedelta(days=config.SESSION_DAYS)
 
 bp = Blueprint("dashboard", __name__)
 
@@ -63,26 +74,23 @@ def clear_failures(ip):
         _failures.pop(ip, None)
 
 
-def is_authenticated():
-    """True only for the configured user with the right password.
+def check_credentials(username, password):
+    """Constant-time credential check, shared by the form and basic auth.
 
-    Everyone else - including every anonymous visitor - gets the demo day,
-    never real data. No password configured means nobody is authenticated,
-    and a locked-out IP is refused even with correct credentials.
+    Records a failure against the caller's IP so both routes feed the same
+    lockout. No password configured means nobody authenticates.
     """
     if not config.DASHBOARD_PASSWORD:
         return False
-
-    auth = request.authorization
-    if not auth or not auth.username or auth.password is None:
+    if username is None or password is None:
         return False
 
     ip = client_ip()
     if is_locked_out(ip):
         return False
 
-    user_ok = hmac.compare_digest(auth.username, config.DASHBOARD_USER)
-    password_ok = hmac.compare_digest(auth.password, config.DASHBOARD_PASSWORD)
+    user_ok = hmac.compare_digest(username, config.DASHBOARD_USER)
+    password_ok = hmac.compare_digest(password, config.DASHBOARD_PASSWORD)
 
     if user_ok and password_ok:
         clear_failures(ip)
@@ -90,6 +98,22 @@ def is_authenticated():
 
     record_failure(ip)
     return False
+
+
+def is_authenticated():
+    """A valid login session, or basic auth on the request.
+
+    The session cookie is what browsers use - a 401 challenge never prompts
+    inside iOS webviews, it just renders the error body. Basic auth stays
+    supported because it's the right fit for the widget's API calls.
+    """
+    if session.get("authed") is True:
+        return True
+
+    auth = request.authorization
+    if not auth or not auth.username or auth.password is None:
+        return False
+    return check_credentials(auth.username, auth.password)
 
 
 def ring_color(value, thresholds=(config.RING_LOW_THRESHOLD, config.RING_HIGH_THRESHOLD)):
@@ -368,21 +392,28 @@ def dashboard():
     )
 
 
-@bp.route("/login")
+@bp.route("/login", methods=["GET", "POST"])
 def login():
-    """Basic-auth entry point.
+    if is_authenticated():
+        return redirect(url_for("dashboard.dashboard"))
 
-    The dashboard itself never returns 401 (anonymous visitors get the demo
-    instead of a password prompt), so this is what actually triggers the
-    browser's credential dialog. Once authenticated, the browser sends the
-    header on subsequent requests and "/" starts serving real data.
-    """
-    if not is_authenticated():
-        return (
-            "Authentication required.",
-            401,
-            {"WWW-Authenticate": 'Basic realm="fitness_by_ferenc"'},
-        )
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if check_credentials(username, password):
+            session.permanent = True
+            session["authed"] = True
+            return redirect(url_for("dashboard.dashboard"))
+        error = ("Too many attempts - try again in a few minutes."
+                 if is_locked_out(client_ip()) else "Wrong username or password.")
+
+    return render_template("login.html", error=error), (200 if error is None else 401)
+
+
+@bp.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
     return redirect(url_for("dashboard.dashboard"))
 
 
