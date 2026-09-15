@@ -4,7 +4,7 @@ import logging
 import math
 import os
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from threading import Lock
 
 from flask import (Blueprint, Flask, jsonify, redirect, render_template, request,
@@ -256,6 +256,19 @@ def is_stale(updated_at, stale_minutes=config.SYNC_STALE_MINUTES):
     return datetime.now() - updated > timedelta(minutes=stale_minutes)
 
 
+def format_gmt_as_local(gmt_timestamp):
+    """Garmin's lastSyncTimestampGMT is GMT with no offset marker; rendering
+    it raw would show a time hours off from everything else on the page."""
+    if not gmt_timestamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(gmt_timestamp)
+    except ValueError:
+        return None
+    local = parsed.replace(tzinfo=timezone.utc).astimezone()
+    return local.strftime("%b %d, %H:%M")
+
+
 def format_time_only(updated_at):
     if not updated_at:
         return None
@@ -415,7 +428,7 @@ def dashboard():
         recommendation=today.get("recommendation_detail") or "No data yet today - waiting for first sync.",
         recommendation_type=today.get("recommendation_type"),
         synced_at=format_synced_at(today.get("updated_at")),
-        watch_synced_at=format_synced_at(today.get("watch_synced_at")),
+        watch_synced_at=format_gmt_as_local(today.get("watch_synced_at")),
     )
 
 
