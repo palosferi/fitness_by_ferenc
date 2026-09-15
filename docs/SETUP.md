@@ -100,14 +100,28 @@ one-tap dashboard.
 
 1. Install the free **Scriptable** app from the App Store.
 2. Open it, create a new script, paste in the contents of `widget/GarminWidget.js`.
-3. Edit the `SERVER_URL` constant at the top to your Tailscale hostname + `:8420`.
-4. Run it once inside the app to confirm it pulls real data.
-5. Long-press your Home Screen -> add a widget -> Scriptable -> pick Medium size.
-6. Edit the widget, set "Script" to the one you just created, "when interacting" to "Run Script".
+3. Check `SERVER_URL` and `USERNAME` at the top match your deployment.
+4. **Run it once inside Scriptable.** It prompts for your `DASHBOARD_PASSWORD`
+   and stores it in the iOS keychain - the password is never written into the
+   script, so the script stays safe to share or screenshot.
+5. Long-press your Home Screen -> add a widget -> Scriptable -> Medium size.
+6. Edit the widget, set "Script" to the one you just created, and set
+   "When Interacting" to **Run Script** (not "Open URL").
 
-The widget refreshes roughly every 15 minutes (iOS controls the exact
-timing) and shows four rings - Strain, Target, Readiness, Sleep - plus
-today's training recommendation.
+The tile shows three rings - Sleep, Recovery, Strain - plus today's
+recommendation and a steps/sleep-target footer. Tapping it opens the full
+dashboard inside Scriptable.
+
+Notes on how it authenticates:
+- The widget sends HTTP basic auth on the API call, so it gets **your** data.
+  Without credentials it would get the public demo day instead - which is
+  what the "Tap to sign in" heading means.
+- Tapping fetches the page with the same auth header and hands the HTML to
+  Scriptable's WebView. Plain `loadURL()` would arrive unauthenticated and
+  quietly show the demo page.
+- iOS decides how often the tile actually refreshes (roughly every 10-15
+  minutes). It budgets widget refreshes for battery and ignores requests to
+  go faster; tapping always fetches fresh.
 
 ## Notes / things that may need tuning
 

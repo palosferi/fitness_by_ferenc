@@ -1,21 +1,57 @@
-// Scriptable widget: daily fitness rings, pulled from your home-server dashboard.
+// Scriptable widget: your daily fitness rings, pulled from the dashboard.
+//
+// Setup
 // 1. Install the free "Scriptable" app from the App Store.
 // 2. Create a new script, paste this whole file in.
-// 3. Replace SERVER_URL below with your Tailscale hostname/IP + port.
-// 4. Run once in-app to test, then add a Scriptable widget to your Home
-//    Screen and set its "Script" to this one (Medium size recommended).
-// 5. Edit the widget (long-press -> Edit Widget) and set "Tap" / "When
-//    Interacting" to "Run Script" (not "Open URL") - that's what makes
-//    tapping open a fullscreen in-app view instead of kicking out to Safari.
-//    Note: the passive home-screen tile itself still only refreshes on
-//    iOS's own schedule (it ignores taps for that) - iOS budgets widget
-//    refreshes for battery reasons and there's no way around that from
-//    Scriptable. Tapping gets you a guaranteed-fresh view on demand instead.
+// 3. Run it once inside Scriptable. It'll prompt for your dashboard password
+//    and store it in the iOS keychain - it is NOT saved in this script, so
+//    the script stays safe to share or screenshot.
+// 4. Long-press the Home Screen -> add a Scriptable widget (Medium) -> set
+//    its "Script" to this one.
+// 5. Edit the widget (long-press -> Edit Widget) and set "When Interacting"
+//    to "Run Script", not "Open URL". That's what makes a tap open the
+//    dashboard inside Scriptable instead of kicking you out to Safari.
+//
+// The tile refreshes on iOS's own schedule (roughly every 10-15 min; iOS
+// budgets widget refreshes for battery and ignores any request to go
+// faster). Tapping always fetches fresh.
 
-const SERVER_URL = "http://100.102.24.16:8420"; // fujitsu, via Tailscale
+const SERVER_URL = "https://ferencpalos.is-a.dev/fit";
+const USERNAME = "ferenc";
+const KEYCHAIN_KEY = "fitness_by_ferenc_password";
 
-async function fetchToday() {
+// ---------------------------------------------------------------- auth
+
+async function getPassword() {
+  if (Keychain.contains(KEYCHAIN_KEY)) return Keychain.get(KEYCHAIN_KEY);
+  // Widgets can't show prompts, so only ask when running inside the app.
+  if (!config.runsInWidget) {
+    const alert = new Alert();
+    alert.title = "Dashboard password";
+    alert.message = "Stored in the iOS keychain, not in the script.";
+    alert.addSecureTextField("Password", "");
+    alert.addAction("Save");
+    alert.addCancelAction("Cancel");
+    if ((await alert.present()) === 0) {
+      const value = alert.textFieldValue(0);
+      if (value) {
+        Keychain.set(KEYCHAIN_KEY, value);
+        return value;
+      }
+    }
+  }
+  return null;
+}
+
+function authHeaders(password) {
+  if (!password) return {};
+  const token = Data.fromString(`${USERNAME}:${password}`).toBase64String();
+  return { Authorization: `Basic ${token}` };
+}
+
+async function fetchToday(password) {
   const req = new Request(`${SERVER_URL}/api/today`);
+  req.headers = authHeaders(password);
   req.timeoutInterval = 8;
   try {
     return await req.loadJSON();
@@ -24,7 +60,9 @@ async function fetchToday() {
   }
 }
 
-function colorFor(value, thresholds = [40, 70]) {
+// ---------------------------------------------------------------- drawing
+
+function colorFor(value, thresholds = [34, 67]) {
   if (value === null || value === undefined) return new Color("#555555");
   if (value < thresholds[0]) return new Color("#e5484d");
   if (value < thresholds[1]) return new Color("#f5a623");
@@ -57,11 +95,9 @@ function drawRingImage(size, pct, color, displayText) {
     ctx.strokePath();
   }
 
-  drawArc(0, 360, new Color("#2a2a2a"));
+  drawArc(0, 360, new Color("#26272c"));
   const clamped = Math.max(0, Math.min(100, pct || 0));
-  if (clamped > 0) {
-    drawArc(0, 360 * (clamped / 100), color);
-  }
+  if (clamped > 0) drawArc(0, 360 * (clamped / 100), color);
 
   ctx.setTextColor(Color.white());
   ctx.setFont(Font.boldSystemFont(size * 0.24));
@@ -71,13 +107,12 @@ function drawRingImage(size, pct, color, displayText) {
   return ctx.getImage();
 }
 
-function addRingColumn(stack, label, pct, displayText, color, size = 62) {
+function addRingColumn(stack, label, pct, displayText, color, size = 70) {
   const col = stack.addStack();
   col.layoutVertically();
   col.centerAlignContent();
-  const img = drawRingImage(size, pct, color, displayText);
-  const iw = col.addImage(img);
-  iw.imageSize = new Size(size, size);
+  const img = col.addImage(drawRingImage(size, pct, color, displayText));
+  img.imageSize = new Size(size, size);
   col.addSpacer(3);
   const lbl = col.addText(label);
   lbl.font = Font.systemFont(10);
@@ -85,17 +120,33 @@ function addRingColumn(stack, label, pct, displayText, color, size = 62) {
   lbl.centerAlignText();
 }
 
-async function createWidget() {
-  const data = await fetchToday();
+// ---------------------------------------------------------------- widget
+
+async function createWidget(password) {
+  const data = await fetchToday(password);
   const widget = new ListWidget();
-  widget.backgroundColor = new Color("#111111");
+  widget.backgroundColor = new Color("#0a0a0b");
   widget.setPadding(12, 12, 12, 12);
-  widget.url = SERVER_URL;
 
   const stale = data && data.stale;
-  const title = widget.addText(data ? (stale ? "Today (stale)" : "Today") : "No data");
+  const demo = data && data.demo;
+
+  let heading = "Today";
+  let headingColor = Color.gray();
+  if (!data) {
+    heading = "No data";
+    headingColor = new Color("#e5484d");
+  } else if (demo) {
+    heading = "Tap to sign in";
+    headingColor = new Color("#5b8def");
+  } else if (stale) {
+    heading = "Today (stale)";
+    headingColor = new Color("#f5a623");
+  }
+
+  const title = widget.addText(heading);
   title.font = Font.mediumSystemFont(12);
-  title.textColor = stale ? new Color("#f5a623") : Color.gray();
+  title.textColor = headingColor;
   widget.addSpacer(6);
 
   const row = widget.addStack();
@@ -103,16 +154,16 @@ async function createWidget() {
   row.centerAlignContent();
 
   if (data) {
-    const recovery = data.readiness_score;
     const sleep = data.sleep_score;
+    const recovery = data.readiness_score;
     const strain = data.strain_score;
 
-    // Same three as the dashboard, same order: Recovery, Sleep, Day Strain.
-    addRingColumn(row, "Recovery", recovery, recovery != null ? `${Math.round(recovery)}` : "--", colorFor(recovery, [34, 67]), 70);
+    // Same three as the dashboard, same order.
+    addRingColumn(row, "Sleep", sleep, sleep != null ? `${Math.round(sleep)}` : "--", colorFor(sleep));
     row.addSpacer();
-    addRingColumn(row, "Sleep", sleep, sleep != null ? `${Math.round(sleep)}` : "--", colorFor(sleep, [34, 67]), 70);
+    addRingColumn(row, "Recovery", recovery, recovery != null ? `${Math.round(recovery)}` : "--", colorFor(recovery));
     row.addSpacer();
-    addRingColumn(row, "Strain", strain, strain != null ? `${Math.round(strain)}` : "--", new Color("#5b8def"), 70);
+    addRingColumn(row, "Strain", strain, strain != null ? `${Math.round(strain)}` : "--", new Color("#5b8def"));
 
     widget.addSpacer(8);
     const rec = widget.addText(data.recommendation_detail || "");
@@ -120,11 +171,9 @@ async function createWidget() {
     rec.textColor = Color.white();
     rec.lineLimit = 2;
 
-    const steps = data.steps;
-    const sleepHours = data.sleep_recommendation_hours;
     const footerBits = [];
-    if (steps) footerBits.push(`${Math.round(steps / 1000)}k steps`);
-    if (sleepHours) footerBits.push(`sleep target ${sleepHours}h`);
+    if (data.steps) footerBits.push(`${Math.round(data.steps / 1000)}k steps`);
+    if (data.sleep_recommendation_hours) footerBits.push(`sleep target ${data.sleep_recommendation_hours}h`);
     if (footerBits.length) {
       widget.addSpacer(4);
       const footer = widget.addText(footerBits.join(" · "));
@@ -133,9 +182,9 @@ async function createWidget() {
     }
   } else {
     row.addSpacer();
-    const err = row.addText("Can't reach server\n(check Tailscale)");
+    const err = row.addText("Can't reach server");
     err.font = Font.systemFont(11);
-    err.textColor = Color.red();
+    err.textColor = new Color("#e5484d");
     row.addSpacer();
   }
 
@@ -143,15 +192,39 @@ async function createWidget() {
   return widget;
 }
 
-if (config.runsInWidget) {
-  const widget = await createWidget();
-  Script.setWidget(widget);
-} else {
-  // Tapped directly, or the widget's interaction is set to "Run Script":
-  // show a fullscreen in-app view (Scriptable's own WebView, no Safari
-  // chrome) instead of previewing the tile or jumping out to the browser.
+// ---------------------------------------------------------------- in-app
+
+async function presentDashboard(password) {
   const webView = new WebView();
-  await webView.loadURL(SERVER_URL);
+
+  // Fetch the page ourselves so the auth header goes with it, then hand the
+  // HTML to the WebView. loadURL() alone would arrive unauthenticated and
+  // show the public demo page instead of real numbers. The page is fully
+  // self-contained (inline CSS and SVG), so nothing else needs fetching.
+  const req = new Request(`${SERVER_URL}/`);
+  req.headers = authHeaders(password);
+  req.timeoutInterval = 10;
+
+  try {
+    let html = await req.loadString();
+    // The page reloads itself every 5 minutes; that request wouldn't carry
+    // the auth header and would silently drop back to demo data.
+    html = html.replace(/setInterval\([^)]*\)[^;]*;/g, "");
+    await webView.loadHTML(html, SERVER_URL);
+  } catch (e) {
+    await webView.loadURL(SERVER_URL);
+  }
+
   await webView.present(true);
+}
+
+// ---------------------------------------------------------------- entry
+
+const password = await getPassword();
+
+if (config.runsInWidget) {
+  Script.setWidget(await createWidget(password));
+} else {
+  await presentDashboard(password);
 }
 Script.complete();
