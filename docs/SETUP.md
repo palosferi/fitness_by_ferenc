@@ -96,29 +96,57 @@ with the same account, and turn it on. Once connected, Safari can reach
 Add that page to your Home Screen (Share -> Add to Home Screen) for a
 one-tap dashboard.
 
-## 6. iOS widget (Scriptable)
+## 6. Public hostname
+
+The dashboard is served at **https://fit.ferencpalos.is-a.dev** through the
+reverse proxy. It owns the whole subdomain, so there is no path prefix:
+
+- Point the proxy host at `http://<server>:8420`.
+- Leave `URL_PREFIX` **unset** in `.env`. It only exists for serving under a
+  sub-path (the old `ferencpalos.is-a.dev/fit` layout); setting it now would
+  put every route one level deep and break the widget's `/api/today` call.
+
+Tailscale (section 5) still works as a private fallback if the proxy is down.
+
+## 7. iOS widget (Scriptable)
 
 1. Install the free **Scriptable** app from the App Store.
 2. Open it, create a new script, paste in the contents of `widget/GarminWidget.js`.
-3. Check `SERVER_URL` and `USERNAME` at the top match your deployment.
-4. **Run it once inside Scriptable.** It prompts for your `DASHBOARD_PASSWORD`
-   and stores it in the iOS keychain - the password is never written into the
-   script, so the script stays safe to share or screenshot.
+3. Check `SERVER_URL` at the top matches your deployment.
+4. **Run it once inside Scriptable.** It prompts for your dashboard username
+   and password and stores both in the iOS keychain - neither is written into
+   the script, so it stays safe to share or screenshot. The username must
+   match `DASHBOARD_USER` in the server's `.env` exactly.
 5. Long-press your Home Screen -> add a widget -> Scriptable -> Medium size.
-6. Edit the widget, set "Script" to the one you just created, and set
-   "When Interacting" to **Run Script** (not "Open URL").
+6. Edit the widget (long-press -> Edit Widget) and set:
+   - **Script**: the one you just created
+   - **When Interacting**: `Open URL`
+   - **URL**: `https://fit.ferencpalos.is-a.dev/`
+
+   Put the URL in that field rather than letting the script set it - if both
+   are set the tap fires twice, leaving two apps to close. Prefer this over
+   "Run Script": that routes the tap through Scriptable, which iOS gives no
+   way to close afterwards, so you land in its script list on the way back.
+
+   To open straight into a monitor, use a fragment - `/#health-detail` or
+   `/#stress-detail` - and the page loads with that panel already expanded.
 
 The tile shows three rings - Sleep, Recovery, Strain - plus today's
-recommendation and a steps/sleep-target footer. Tapping it opens the full
-dashboard inside Scriptable.
+recommendation and a steps/sleep-target footer.
 
 Notes on how it authenticates:
 - The widget sends HTTP basic auth on the API call, so it gets **your** data.
   Without credentials it would get the public demo day instead - which is
   what the "Tap to sign in" heading means.
-- Tapping fetches the page with the same auth header and hands the HTML to
-  Scriptable's WebView. Plain `loadURL()` would arrive unauthenticated and
-  quietly show the demo page.
+- The tap itself relies on the session cookie, which is why it can open in
+  Safari rather than going through Scriptable's WebView. Running the script
+  by hand still uses that WebView, fetching the page with the auth header
+  attached (a plain `loadURL()` would arrive unauthenticated and quietly show
+  the demo page).
+- The dashboard page uses **no JavaScript at all** - the monitor tiles expand
+  via `:target`, and the 5-minute refresh is a `<meta http-equiv="refresh">`.
+  That is deliberate: it keeps the tiles working inside the in-app WebView,
+  where the script the widget has to strip out used to leave the page inert.
 - iOS decides how often the tile actually refreshes (roughly every 10-15
   minutes). It budgets widget refreshes for battery and ignores requests to
   go faster; tapping always fetches fresh.

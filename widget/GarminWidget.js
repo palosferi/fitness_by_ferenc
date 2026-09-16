@@ -11,7 +11,7 @@
 //    its "Script" to this one.
 // 5. Edit the widget (long-press -> Edit Widget):
 //      When Interacting : Open URL
-//      URL              : https://ferencpalos.is-a.dev/fit/
+//      URL              : https://fit.ferencpalos.is-a.dev/
 //    Put the URL in that field - this script deliberately does NOT set
 //    widget.url. Setting both makes the tap fire twice: Scriptable opens for
 //    the script's URL and the browser opens for the field's, leaving two apps
@@ -28,7 +28,7 @@
 // budgets widget refreshes for battery and ignores any request to go
 // faster). Tapping always fetches fresh.
 
-const SERVER_URL = "https://ferencpalos.is-a.dev/fit";
+const SERVER_URL = "https://fit.ferencpalos.is-a.dev";
 const KEYCHAIN_USER = "fitness_by_ferenc_user";
 const KEYCHAIN_PASS = "fitness_by_ferenc_password";
 
