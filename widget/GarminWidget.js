@@ -232,9 +232,13 @@ async function presentDashboard(creds) {
 
   try {
     let html = await req.loadString();
-    // The page reloads itself every 5 minutes; that request wouldn't carry
-    // the auth header and would silently drop back to demo data.
-    html = html.replace(/setInterval\([^)]*\)[^;]*;/g, "");
+    // The page refreshes itself every 5 minutes; that request wouldn't carry
+    // the auth header and would silently drop back to demo data. Removing a
+    // whole self-contained <meta> tag can't leave the document malformed -
+    // an earlier version cut the old setInterval call mid-expression, and the
+    // leftover `}, 5 * 60 * 1000);` was a syntax error that took down the
+    // entire script block with it, leaving the monitor tiles unresponsive.
+    html = html.replace(/<meta\s+http-equiv="refresh"[^>]*>/gi, "");
     await webView.loadHTML(html, SERVER_URL);
   } catch (e) {
     await webView.loadURL(SERVER_URL);

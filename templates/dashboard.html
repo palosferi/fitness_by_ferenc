@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Refresh in markup rather than script, so the page needs no JavaScript at
+     all. A reload keeps the URL fragment, so an open panel stays open. The
+     widget strips this tag before handing the HTML to its WebView, where the
+     reload would arrive without the auth header and drop back to demo data. -->
+<meta http-equiv="refresh" content="300">
 <title>Fitness Dashboard</title>
 <style>
   :root {
@@ -126,6 +131,15 @@
     font-weight: 600;
     margin-bottom: 14px;
   }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .card-head .card-title { margin-bottom: 0; }
+  .card-close {
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: 0.04em;
+    flex: none;
+  }
   .rec-detail { font-size: 16px; line-height: 1.45; }
 
   /* ---- monitor tiles ---- */
@@ -142,6 +156,8 @@
     display: grid;
     gap: 10px;
     width: 100%;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
   }
   .tile:hover { border-color: #33353c; }
   .tile:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
@@ -156,7 +172,17 @@
   }
   .tile-chevron { color: var(--muted); flex: none; width: 14px; height: 14px; transition: transform 0.18s ease; }
   .tile-chevron svg { width: 100%; height: 100%; display: block; }
-  .tile[aria-expanded="true"] .tile-chevron { transform: rotate(90deg); }
+  /* Expansion is pure CSS: the tiles are links to the panel below, and only
+     the panel matching the URL fragment is shown. No JavaScript, so it still
+     works inside the widget's in-app WebView - and ":target" gives the
+     one-open-at-a-time behaviour for free, since there's only ever one.
+     It also makes every panel linkable: /#health-detail opens expanded. */
+  .detail { display: none; }
+  .detail:target { display: block; }
+  /* No parent selector, so the open tile's chevron is rotated by matching on
+     the document. Where :has() is unsupported the chevron simply stays put. */
+  body:has(#health-detail:target) .tile[href="#health-detail"] .tile-chevron,
+  body:has(#stress-detail:target) .tile[href="#stress-detail"] .tile-chevron { transform: rotate(90deg); }
   .tile-status { display: flex; align-items: center; gap: 7px; }
   .tile-status-text { font-size: 13px; font-weight: 700; letter-spacing: 0.01em; }
   .tile-check { width: 17px; height: 17px; border-radius: 50%; flex: none; display: grid; place-items: center; }
@@ -319,9 +345,9 @@
   {% endif %}
 
   {% if health_summary or stress %}
-  <div class="monitors">
+  <div class="monitors" id="monitors">
     {% if health_summary %}
-    <button type="button" class="tile" aria-expanded="false" aria-controls="health-detail" data-target="health-detail">
+    <a class="tile" href="#health-detail">
       <span class="tile-head">
         <span class="tile-title">Health<br>Monitor</span>
         <span class="tile-chevron">{% include "icons/chevron.svg" %}</span>
@@ -331,11 +357,11 @@
         <span class="tile-status-text text-{{ health_summary.status }}">{{ health_summary.status_text }}</span>
       </span>
       <span class="tile-sub">{{ health_summary.count_text }}</span>
-    </button>
+    </a>
     {% endif %}
 
     {% if stress %}
-    <button type="button" class="tile" aria-expanded="false" aria-controls="stress-detail" data-target="stress-detail">
+    <a class="tile" href="#stress-detail">
       <span class="tile-head">
         <span class="tile-title">Stress<br>Monitor</span>
         <span class="tile-chevron">{% include "icons/chevron.svg" %}</span>
@@ -345,14 +371,17 @@
         <span class="tile-status-text" style="color: {{ stress.color }};">{{ stress.label }}</span>
       </span>
       <span class="tile-sub">{{ stress.time or "--:--" }}</span>
-    </button>
+    </a>
     {% endif %}
   </div>
 
   {% if health_summary %}
-  <div id="health-detail" hidden>
+  <div id="health-detail" class="detail">
   <div class="card">
-    <div class="card-title">Health Monitor</div>
+    <div class="card-head">
+      <div class="card-title">Health Monitor</div>
+      <a class="card-close" href="#monitors">Close</a>
+    </div>
     {% if health_summary %}
     <div class="summary {{ health_summary.status }}">
       <span class="summary-dot {{ health_summary.status }}"></span>{{ health_summary.detail_text }}
@@ -383,9 +412,12 @@
   {% endif %}
 
   {% if stress %}
-  <div id="stress-detail" hidden>
+  <div id="stress-detail" class="detail">
   <div class="card">
-    <div class="card-title">Stress Monitor</div>
+    <div class="card-head">
+      <div class="card-title">Stress Monitor</div>
+      <a class="card-close" href="#monitors">Close</a>
+    </div>
     <div class="gauge-wrap">
       <svg class="gauge" viewBox="0 0 200 104" role="img" aria-label="Stress {{ stress.value }} of 100, {{ stress.label }}">
         <defs>
@@ -433,24 +465,5 @@
   </div>
 
 </div>
-<script>
-  document.querySelectorAll(".tile").forEach((tile) => {
-    tile.addEventListener("click", () => {
-      const panel = document.getElementById(tile.dataset.target);
-      const opening = panel.hidden;
-      // One open at a time, like tapping through to a detail screen.
-      document.querySelectorAll(".tile").forEach((other) => {
-        other.setAttribute("aria-expanded", "false");
-        document.getElementById(other.dataset.target).hidden = true;
-      });
-      if (opening) {
-        panel.hidden = false;
-        tile.setAttribute("aria-expanded", "true");
-      }
-    });
-  });
-
-  setInterval(() => { window.location.reload(); }, 5 * 60 * 1000);
-</script>
 </body>
 </html>
