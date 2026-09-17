@@ -39,9 +39,16 @@ as of the last commit. There is no CI.
   - Its green **Online** badge does not health-check the upstream - it only
     reports that the nginx config loaded. A host 502ing continuously still
     reads Online.
-  - `ferencpalos.is-a.dev` forwards wholesale to `portfolio:80`, and there are
-    no Custom Locations in NPM at all. The legacy `/fit` rule lives inside the
-    *portfolio container's own nginx config*, not in NPM.
+  - `ferencpalos.is-a.dev` forwards wholesale to `portfolio:80` - stock
+    `nginx:alpine` serving `/var/www/ferencpalos`, which proxies nothing - and
+    there are no Custom Locations in NPM at all. Hand-written path rules live
+    in `/data/nginx/custom/server_proxy.conf`, on the host at
+    `/home/palos/server/data/npm/nginx/custom/server_proxy.conf`. NPM includes
+    that file in *every* proxy host's server block and never rewrites it, so
+    each rule carries an `if ($host != ...) { return 404; }` guard to keep it
+    off the other domains. **`/adventures` -> `bucketlist:3000` lives in that
+    file and is live - do not delete it.** Edit the file directly, then
+    `docker exec nginx-proxy-manager nginx -t` before `nginx -s reload`.
 
 - **The widget is out of git's reach.** `widget/GarminWidget.js` has to be
   pasted into Scriptable by hand. Its tap target is the widget's own
@@ -53,13 +60,6 @@ as of the last commit. There is no CI.
   `/api/today` fetch authenticates separately out of the iOS keychain, so the
   tile can read real while the tapped-through page reads demo - that split
   means a missing sign-in, not a bug.
-
-## Outstanding
-
-- The legacy `/fit` rule in the portfolio container's nginx still exists and
-  404s. Ferenc wants it gone outright rather than 301'd to the new root.
-  Cosmetic only; needs a shell on the box, which Tailscale SSH currently
-  denies (`tailnet policy does not permit you to SSH as user "palosferenc"`).
 
 ---
 
