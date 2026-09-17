@@ -4,75 +4,62 @@ Orientation lives in `README.md` (what the scores mean) and `docs/SETUP.md`
 (deployment). Tests are `pytest` from the repo root - 50 of them, all passing
 as of the last commit. There is no CI.
 
-Two things the repo doesn't tell you:
+## Things the repo doesn't tell you
 
 - **The server copy is not a git clone.** `~/fitness_by_ferenc` on the Fujitsu
   box was scp'd over, so `git pull` fails there. Deploy by copying individual
   files. Converting it to a real clone is safe whenever someone wants to -
   `.gitignore` already covers `.env`, `*.db`, `backups/` and the token store,
   so a checkout would only overwrite tracked source.
+
+- **The dashboard uses no JavaScript, deliberately.** Expansion is `:target`
+  CSS; the auto-reload is a `<meta http-equiv="refresh">`. The reason: the iOS
+  widget strips the reload before handing the HTML to its WebView, and when
+  that reload was `setInterval(...)` the stripping regex cut it mid-expression,
+  leaving a syntax error that killed the *entire* script block - including the
+  tile handlers defined above it. The page rendered fine (it is all
+  server-side) and did nothing. `b076c04` removed the dependency rather than
+  tightening the regex. Re-introducing script re-opens that whole class of bug.
+  Side effect worth knowing: `/#health-detail` and `/#stress-detail` deep-link
+  to an open panel.
+
+- **Serving topology.** The dashboard is `https://fit.ferencpalos.is-a.dev`,
+  served by gunicorn under systemd on the **host** at `:8420` - not in a
+  container. `URL_PREFIX` must stay unset; setting it puts every route a level
+  deep and 404s the widget's `/api/today`.
+
 - **The reverse proxy is Nginx Proxy Manager**, admin UI on `http://<host>:81`
   (plain HTTP - the `fujitsu` hostname has a cached HSTS policy that forces
-  browsers to https and breaks it, so reach it by IP).
+  browsers to https and breaks it, so reach it by IP). Its proxy host for the
+  dashboard forwards to `192.168.0.86:8420`, the host's LAN IP. Three traps,
+  each of which has already cost time:
+  - NPM is itself containerised, so `127.0.0.1` never works as an upstream.
+    The host's LAN IP works from any docker network; the `172.x` bridge
+    gateways only work from the bridge NPM happens to sit on.
+  - Its green **Online** badge does not health-check the upstream - it only
+    reports that the nginx config loaded. A host 502ing continuously still
+    reads Online.
+  - `ferencpalos.is-a.dev` forwards wholesale to `portfolio:80`, and there are
+    no Custom Locations in NPM at all. The legacy `/fit` rule lives inside the
+    *portfolio container's own nginx config*, not in NPM.
 
----
+- **The widget is out of git's reach.** `widget/GarminWidget.js` has to be
+  pasted into Scriptable by hand. Its tap target is the widget's own
+  *When Interacting -> Open URL* field; the script deliberately does not set
+  `widget.url` (`905d851`), because setting both makes one tap open two apps.
 
-## Where things stand - 2026-09-17
+- **Sessions are per-domain and per-device.** An unauthenticated browser gets
+  the **demo day**, which looks like real data with a small badge. The widget's
+  `/api/today` fetch authenticates separately out of the iOS keychain, so the
+  tile can read real while the tapped-through page reads demo - that split
+  means a missing sign-in, not a bug.
 
-*Delete this section once the migration below is finished.*
+## Outstanding
 
-### Done
-
-`b076c04` fixed the monitor tiles being unresponsive when the dashboard was
-opened from the iOS widget. Root cause worth remembering: the widget strips
-the page's auto-reload before handing the HTML to its WebView, and the regex
-doing it cut `setInterval(...)` mid-expression, leaving a syntax error that
-killed the *entire* script block - including the tile handlers defined above
-it. The page rendered fine (all server-side) and did nothing. The fix removed
-the dependency rather than tightening the regex: **the dashboard now uses no
-JavaScript at all**, expansion is `:target` CSS, and the reload is a
-`<meta http-equiv="refresh">` that the widget strips as a whole tag. Keep it
-that way - re-introducing script would re-open the same class of bug. Side
-effect: `/#health-detail` and `/#stress-detail` deep-link to an open panel.
-
-`a74b59b` moved the dashboard from `ferencpalos.is-a.dev/fit` to its own
-subdomain **`fit.ferencpalos.is-a.dev`**. `URL_PREFIX` must stay unset now;
-setting it puts every route a level deep and 404s the widget's `/api/today`.
-
-Server side is fully deployed and verified: new template in place,
-`URL_PREFIX` commented out in `.env`, gunicorn serving at the root on `:8420`,
-service active. NPM has the proxy host and a Let's Encrypt cert for the new
-name (valid to 2026-12-15).
-
-### Blocked here
-
-**NPM returns 502 for `https://fit.ferencpalos.is-a.dev/`** - TLS is fine, the
-upstream address is wrong. The app answers 200 from the host on all of
-`127.0.0.1`, `172.17.0.1`, `172.18.0.1` and `192.168.0.86`, port 8420.
-
-The likely mistake: `ferencpalos.is-a.dev` serves the *portfolio* container as
-its main forward target, with `/fit` as a **Custom Location** underneath. The
-working address is the one on that custom location, not the host's main
-Forward Hostname/IP. Failing that, `172.17.0.1:8420` (docker bridge gateway)
-is the standard way a container reaches a host service.
-
-To narrow it down, from inside the proxy container:
-
-```bash
-sudo docker exec nginx-proxy-manager sh -c 'for ip in 172.17.0.1 172.18.0.1 192.168.0.86; do printf "%-14s " $ip; curl -s -o /dev/null -w "%{http_code}\n" --max-time 5 http://$ip:8420/; done'
-```
-
-### Then, in order
-
-1. Sign in at `https://fit.ferencpalos.is-a.dev/login`. Session cookies are
-   per-domain, so until this is done the new host serves the **demo day** -
-   which looks like real data with a badge, and is easy to mistake for a bug.
-2. Re-paste `widget/GarminWidget.js` into Scriptable (git doesn't reach it),
-   and set the widget's *When Interacting* to `Open URL` with the new address.
-3. Verify the monitor tiles expand **through the widget**, not just in Safari.
-   That is the path that was broken and the only one that proves the fix.
-4. Optional: 301 the old `/fit` to the new root so stale bookmarks don't land
-   on the demo page.
+- The legacy `/fit` rule in the portfolio container's nginx still exists and
+  404s. Ferenc wants it gone outright rather than 301'd to the new root.
+  Cosmetic only; needs a shell on the box, which Tailscale SSH currently
+  denies (`tailnet policy does not permit you to SSH as user "palosferenc"`).
 
 ---
 
