@@ -7,3 +7,8 @@ __pycache__/
 .garminconnect_tokens/
 backups/
 .pytest_cache/
+
+# Work-in-progress status docs. They carry infrastructure detail (home IP,
+# VPN topology, LAN addresses) and this repo is public.
+/ADVENTURES_MIGRATION_HANDOFF.md
+/docs/MIGRATION.md
