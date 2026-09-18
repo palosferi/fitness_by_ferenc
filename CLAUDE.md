@@ -7,6 +7,13 @@ as of the last commit. One skips on a dev checkout that has no
 
 ## Things the repo doesn't tell you
 
+- **Shell on the box is `ssh palos@fujitsu`** (Tailscale, also
+  `100.102.24.16`). The Linux account is `palos` - *not* `palosferenc`, which
+  is the Tailscale account name. Using the latter returns "tailnet policy does
+  not permit you to SSH as user", which reads like an ACL problem and is not
+  one. The tailnet's `ssh` rule is `accept` rather than `check` so
+  non-interactive sessions work.
+
 - **The server copy is not a git clone.** `~/fitness_by_ferenc` on the Fujitsu
   box was scp'd over, so `git pull` fails there. Deploy by copying individual
   files. Converting it to a real clone is safe whenever someone wants to -
