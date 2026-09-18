@@ -1,8 +1,9 @@
 # Notes for Claude
 
 Orientation lives in `README.md` (what the scores mean) and `docs/SETUP.md`
-(deployment). Tests are `pytest` from the repo root - 50 of them, all passing
-as of the last commit. There is no CI.
+(deployment). Tests are `pytest` from the repo root - 57 of them, all passing
+as of the last commit. One skips on a dev checkout that has no
+`garminconnect` installed, since importing `sync` pulls it in. There is no CI.
 
 ## Things the repo doesn't tell you
 

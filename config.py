@@ -24,6 +24,13 @@ USER_TRIMP_EXPONENT = float(os.environ.get("USER_TRIMP_EXPONENT", "1.92"))
 
 DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", "8420"))
 
+# How many stored nights a baseline we derive ourselves needs before it is
+# trusted. Garmin's own baselines (resting HR, SpO2, the HRV balanced range)
+# arrive ready-made and are exempt; this governs the ones we average out of
+# our own rows. A mean of two nights renders identically to a mean of
+# fourteen, so it is better to show no baseline than a brittle one.
+MIN_BASELINE_SAMPLES = int(os.environ.get("MIN_BASELINE_SAMPLES", "5"))
+
 # Ring/stat coloring thresholds (red below LOW, amber below HIGH, green above).
 RING_LOW_THRESHOLD = int(os.environ.get("RING_LOW_THRESHOLD", "40"))
 RING_HIGH_THRESHOLD = int(os.environ.get("RING_HIGH_THRESHOLD", "70"))

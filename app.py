@@ -320,9 +320,19 @@ def pct_for(kind, value):
     return max(0, min(100, value))
 
 
-def _mean_of(rows, field):
+def _mean_of(rows, field, min_samples=None):
+    """Mean of a stored column, or None until enough nights back it.
+
+    Averaging one or two rows produces a number that sits on the bar looking
+    exactly as authoritative as a fortnight's worth, and a metric judged
+    against it swings between "normal" and "alert" on noise alone.
+    """
+    if min_samples is None:
+        min_samples = config.MIN_BASELINE_SAMPLES
     values = [r[field] for r in rows if r.get(field)]
-    return sum(values) / len(values) if values else None
+    if len(values) < min_samples:
+        return None
+    return sum(values) / len(values)
 
 
 def acwr_warning_text(percent, feedback, acute_load):
@@ -372,8 +382,10 @@ def dashboard():
 
     # Garmin ships 7-day baselines for resting HR and SpO2 and a long-run
     # "balanced" range for HRV, all available from day one. Only respiration
-    # has none, so that falls back to our own rows - which stays empty until
-    # there's a week of them.
+    # has none, so that falls back to averaging our own rows - and stays empty
+    # until config.MIN_BASELINE_SAMPLES of them exist. The row still shows
+    # today's value meanwhile; it just isn't scored against a baseline thin
+    # enough to invent an alert.
     resting_hr_baseline = today.get("resting_hr_baseline")
     if not demo_mode and today.get("respiration_baseline") is None:
         history = storage.get_recent_days(conn, date.today().isoformat(), limit=7)

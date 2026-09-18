@@ -353,7 +353,7 @@
         <span class="tile-chevron">{% include "icons/chevron.svg" %}</span>
       </span>
       <span class="tile-status">
-        <span class="tile-check {{ health_summary.status }}">{% include "icons/check.svg" %}</span>
+        <span class="tile-check {{ health_summary.status }}">{%- if health_summary.status == "good" -%}{% include "icons/check.svg" %}{%- else -%}{% include "icons/alert.svg" %}{%- endif -%}</span>
         <span class="tile-status-text text-{{ health_summary.status }}">{{ health_summary.status_text }}</span>
       </span>
       <span class="tile-sub">{{ health_summary.count_text }}</span>

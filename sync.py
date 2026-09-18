@@ -44,6 +44,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("sync")
 
 
+def _derived_baseline(rows, field):
+    """Mean of a stored column, or None until config.MIN_BASELINE_SAMPLES rows
+    have it. Same rule the dashboard applies to its own derived baselines: too
+    few nights and the number is noise wearing a baseline's clothes.
+    """
+    values = [r[field] for r in rows if r.get(field)]
+    if len(values) < config.MIN_BASELINE_SAMPLES:
+        return None
+    return sum(values) / len(values)
+
+
 def run():
     today = date.today()
     today_str = today.isoformat()
@@ -91,11 +102,9 @@ def run():
 
     hrv_baseline = hrv_weekly
     if not hrv_baseline:
-        recent_hrv = [h["hrv_last_night"] for h in history[:7] if h.get("hrv_last_night")]
-        hrv_baseline = sum(recent_hrv) / len(recent_hrv) if recent_hrv else None
+        hrv_baseline = _derived_baseline(history[:7], "hrv_last_night")
 
-    recent_rhr = [h["resting_hr"] for h in history[:7] if h.get("resting_hr")]
-    resting_hr_baseline = sum(recent_rhr) / len(recent_rhr) if recent_rhr else None
+    resting_hr_baseline = _derived_baseline(history[:7], "resting_hr")
 
     garmin_readiness = extract_garmin_readiness_score(snapshot["readiness"])
     if garmin_readiness is not None:
