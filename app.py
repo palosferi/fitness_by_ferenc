@@ -3,13 +3,17 @@ import hmac
 import logging
 import math
 import os
+import queue
+import secrets
+import sqlite3
 import time
 from datetime import date, datetime, timedelta, timezone
-from threading import Lock
+from threading import Event, Lock, Thread
 
-from flask import (Blueprint, Flask, jsonify, redirect, render_template, request,
-                   session, url_for)
+from flask import (Blueprint, Flask, abort, jsonify, redirect, render_template,
+                   request, session, url_for)
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
 import demo
@@ -27,13 +31,43 @@ app = Flask(__name__)
 if config.PROXY_HOP_COUNT:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=config.PROXY_HOP_COUNT, x_proto=config.PROXY_HOP_COUNT)
 
-if config.DASHBOARD_SECRET_KEY:
-    app.secret_key = config.DASHBOARD_SECRET_KEY
-elif config.DASHBOARD_PASSWORD:
-    app.secret_key = hashlib.sha256(f"fbf:{config.DASHBOARD_PASSWORD}".encode()).hexdigest()
-else:
-    app.secret_key = os.urandom(32)  # nobody can authenticate anyway
+app.config["SESSION_COOKIE_NAME"] = config.SESSION_COOKIE_NAME
+app.config["SESSION_COOKIE_PATH"] = config.SESSION_COOKIE_PATH
 app.permanent_session_lifetime = timedelta(days=config.SESSION_DAYS)
+
+
+def _password_hash_on_disk():
+    """The stored password hash, without creating a database to find out.
+
+    This runs at import to seed the signing key, and opening the real
+    database here would litter a fitness.db into whatever directory the
+    process happens to start in.
+    """
+    if not os.path.exists(config.DB_PATH):
+        return None
+    try:
+        return storage.get_setting(storage.get_conn(config.DB_PATH), "dashboard_password_hash")
+    except sqlite3.Error:
+        return None
+
+
+def refresh_secret_key():
+    """Key the session cookie off whatever authenticates people.
+
+    Deriving it keeps sessions valid across restarts with no extra config,
+    and invalidates every session the moment the password changes - which is
+    what you would want anyway. Called again after setup, when the password
+    that seeds it has only just come into existence.
+    """
+    if config.DASHBOARD_SECRET_KEY:
+        app.secret_key = config.DASHBOARD_SECRET_KEY
+        return
+    basis = _password_hash_on_disk() or config.DASHBOARD_PASSWORD
+    app.secret_key = (hashlib.sha256(f"fbf:{basis}".encode()).hexdigest() if basis
+                      else os.urandom(32))  # nobody can authenticate anyway
+
+
+refresh_secret_key()
 
 bp = Blueprint("dashboard", __name__)
 
@@ -74,23 +108,45 @@ def clear_failures(ip):
         _failures.pop(ip, None)
 
 
+def stored_account():
+    """The username and password hash chosen on the setup page, if any.
+
+    Takes precedence over DASHBOARD_USER/DASHBOARD_PASSWORD, which stay
+    supported for an .env-configured deployment. The stored pair is what
+    lets a second instance be handed to somebody else without whoever runs
+    the server ever knowing their password.
+    """
+    try:
+        conn = storage.get_conn(config.DB_PATH)
+        return (storage.get_setting(conn, "dashboard_user"),
+                storage.get_setting(conn, "dashboard_password_hash"))
+    except sqlite3.Error:
+        return (None, None)
+
+
 def check_credentials(username, password):
     """Constant-time credential check, shared by the form and basic auth.
 
     Records a failure against the caller's IP so both routes feed the same
     lockout. No password configured means nobody authenticates.
     """
-    if not config.DASHBOARD_PASSWORD:
-        return False
     if username is None or password is None:
+        return False
+
+    stored_user, stored_hash = stored_account()
+    if stored_hash is None and not config.DASHBOARD_PASSWORD:
         return False
 
     ip = client_ip()
     if is_locked_out(ip):
         return False
 
-    user_ok = hmac.compare_digest(username, config.DASHBOARD_USER)
-    password_ok = hmac.compare_digest(password, config.DASHBOARD_PASSWORD)
+    if stored_hash is not None:
+        user_ok = hmac.compare_digest(username, stored_user or config.DASHBOARD_USER)
+        password_ok = check_password_hash(stored_hash, password)
+    else:
+        user_ok = hmac.compare_digest(username, config.DASHBOARD_USER)
+        password_ok = hmac.compare_digest(password, config.DASHBOARD_PASSWORD)
 
     if user_ok and password_ok:
         clear_failures(ip)
@@ -461,6 +517,17 @@ def dashboard():
 
     warning = acwr_warning_text(today.get("acwr_percent"), today.get("acwr_feedback"), today.get("acute_load"))
 
+    # A partial sync is the more urgent thing to say, so an expired Garmin
+    # session only surfaces when nothing else is competing for the line.
+    # Without it the dashboard just freezes on the last good day, which reads
+    # as "nothing happened today" rather than "sign in again".
+    notice = None
+    if not demo_mode:
+        notice = partial_sync_text(today.get("sync_errors"))
+        if notice is None and storage.get_setting(conn, "garmin_link_state") == "needs_login":
+            notice = (f"Garmin sign-in has expired - reconnect at {url_for('dashboard.setup')} "
+                      "to start syncing again.")
+
     return render_template(
         "dashboard.html",
         rings=rings,
@@ -469,7 +536,7 @@ def dashboard():
         health_summary=health_summary(health_metrics),
         stress=stress,
         warning=warning,
-        notice=None if demo_mode else partial_sync_text(today.get("sync_errors")),
+        notice=notice,
         stale=False if demo_mode else is_stale(today.get("updated_at")),
         demo_mode=demo_mode,
         recommendation=today.get("recommendation_detail") or "No data yet today - waiting for first sync.",
@@ -502,6 +569,198 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("dashboard.dashboard"))
+
+
+# ---- account setup ---------------------------------------------------
+#
+# The setup page exists so an instance can be handed to somebody else without
+# them dictating their Garmin password to whoever runs the server. They type
+# it into the form, it is exchanged for Garmin tokens once, and it is never
+# written to disk.
+#
+# The exchange runs on a background thread because the library asks for an
+# MFA code through a blocking callback, and that code arrives in a second
+# HTTP request. Holding the pending login in module state is only safe
+# because the dashboard runs a single gunicorn worker (see
+# systemd/fitness-dashboard.service) - with more than one, the MFA form could
+# land in a process that knows nothing about the login waiting in another.
+
+_pending_links = {}
+_pending_lock = Lock()
+
+
+class _PendingLink:
+    def __init__(self, dashboard_user, dashboard_password):
+        self.dashboard_user = dashboard_user
+        self.dashboard_password = dashboard_password
+        self.started = time.time()
+        self.mfa_requested = Event()
+        self.codes = queue.Queue(maxsize=1)
+        self.result = queue.Queue(maxsize=1)
+
+    def prompt_mfa(self):
+        self.mfa_requested.set()
+        return self.codes.get(timeout=config.SETUP_MFA_TIMEOUT_SECONDS)
+
+
+def _link_account(email, password, prompt_mfa):
+    """Imported lazily on purpose: garminconnect is a production-only
+    dependency, and the dashboard and its tests still have to run on a
+    checkout without it installed."""
+    from garmin_client import link_account
+    return link_account(email, password, prompt_mfa)
+
+
+def _run_link(pending, email, password):
+    try:
+        _link_account(email, password, pending.prompt_mfa)
+        pending.result.put(("ok", None))
+    except queue.Empty:
+        pending.result.put(("error", "Timed out waiting for the MFA code - start again."))
+    except Exception as exc:
+        log.warning("Garmin link attempt failed: %s", exc)
+        pending.result.put(("error", "Garmin did not accept those details."))
+
+
+def _await_link(pending, timeout):
+    """Wait for the background login to finish, or to ask for an MFA code."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            return pending.result.get(timeout=0.2)
+        except queue.Empty:
+            pass
+        if pending.mfa_requested.is_set():
+            pending.mfa_requested.clear()
+            return ("mfa", None)
+    return ("error", "Garmin didn't respond in time - try again.")
+
+
+def _drop_pending(pending_id):
+    with _pending_lock:
+        _pending_links.pop(pending_id, None)
+
+
+def _drop_abandoned_pending():
+    """A setup someone walked away from still holds their chosen password in
+    memory. Nothing else clears it, so clear it here - the background thread
+    it belongs to has given up by this point anyway."""
+    cutoff = time.time() - config.SETUP_MFA_TIMEOUT_SECONDS
+    with _pending_lock:
+        for pending_id in [k for k, v in _pending_links.items() if v.started < cutoff]:
+            del _pending_links[pending_id]
+
+
+def _finish_link(pending):
+    conn = storage.get_conn(config.DB_PATH)
+    if pending.dashboard_password:
+        storage.set_setting(conn, "dashboard_user", pending.dashboard_user)
+        storage.set_setting(conn, "dashboard_password_hash",
+                            generate_password_hash(pending.dashboard_password))
+        pending.dashboard_password = None
+    storage.set_setting(conn, "garmin_link_state", "linked")
+    refresh_secret_key()
+    session.clear()
+    session.permanent = True
+    session["authed"] = True
+
+
+def account_is_claimed():
+    return bool(stored_account()[1]) or bool(config.DASHBOARD_PASSWORD)
+
+
+def setup_allowed(token):
+    """Either already signed in, or holding the token for a fresh instance.
+
+    The token travels in the URL and then in a hidden field rather than the
+    session, because an unclaimed instance has no password to key a session
+    cookie with - its signing key is random per process, so a restart
+    mid-setup would silently lose it.
+    """
+    if is_authenticated():
+        return True
+    return bool(config.SETUP_TOKEN and token and hmac.compare_digest(token, config.SETUP_TOKEN))
+
+
+@bp.route("/setup", methods=["GET", "POST"])
+def setup():
+    token = request.values.get("token", "")
+    if not setup_allowed(token):
+        # 404 rather than 403 - an instance nobody has claimed yet shouldn't
+        # advertise that it is claimable.
+        abort(404)
+
+    needs_account = not account_is_claimed()
+    error = None
+
+    if request.method == "POST":
+        email = request.form.get("garmin_email", "").strip()
+        password = request.form.get("garmin_password", "")
+        dashboard_user = request.form.get("dashboard_user", "").strip()
+        dashboard_password = request.form.get("dashboard_password", "")
+
+        if needs_account and (not dashboard_user or not dashboard_password):
+            error = "Choose a username and password for the dashboard itself."
+        elif not email or not password:
+            error = "Enter your Garmin Connect email and password."
+        else:
+            pending = _PendingLink(dashboard_user or config.DASHBOARD_USER,
+                                   dashboard_password if needs_account else None)
+            pending_id = secrets.token_urlsafe(16)
+            _drop_abandoned_pending()
+            with _pending_lock:
+                _pending_links[pending_id] = pending
+            Thread(target=_run_link, args=(pending, email, password), daemon=True).start()
+
+            status, detail = _await_link(pending, config.SETUP_LINK_TIMEOUT_SECONDS)
+            if status == "ok":
+                _drop_pending(pending_id)
+                _finish_link(pending)
+                return redirect(url_for("dashboard.dashboard"))
+            if status == "mfa":
+                return render_template("setup.html", step="mfa", token=token,
+                                       pending=pending_id, needs_account=needs_account,
+                                       error=None)
+            _drop_pending(pending_id)
+            error = detail
+
+    return render_template("setup.html", step="credentials", token=token,
+                           pending=None, needs_account=needs_account,
+                           error=error), (200 if error is None else 400)
+
+
+@bp.route("/setup/mfa", methods=["POST"])
+def setup_mfa():
+    token = request.values.get("token", "")
+    if not setup_allowed(token):
+        abort(404)
+
+    pending_id = request.form.get("pending", "")
+    with _pending_lock:
+        pending = _pending_links.get(pending_id)
+
+    def back_to_credentials(message):
+        return render_template("setup.html", step="credentials", token=token,
+                               pending=None, needs_account=not account_is_claimed(),
+                               error=message), 400
+
+    if pending is None:
+        return back_to_credentials("That setup attempt has expired - start again.")
+
+    pending.codes.put(request.form.get("code", "").strip())
+    status, detail = _await_link(pending, config.SETUP_LINK_TIMEOUT_SECONDS)
+    if status == "ok":
+        _drop_pending(pending_id)
+        _finish_link(pending)
+        return redirect(url_for("dashboard.dashboard"))
+    if status == "mfa":
+        # Garmin asked a second time, so the code was wrong or had rolled over.
+        return render_template("setup.html", step="mfa", token=token,
+                               pending=pending_id, needs_account=False,
+                               error="That code wasn't accepted - try the current one."), 400
+
+    _drop_pending(pending_id)
+    return back_to_credentials(detail)
 
 
 app.register_blueprint(bp, url_prefix=config.URL_PREFIX or None)

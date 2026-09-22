@@ -151,6 +151,91 @@ Notes on how it authenticates:
   minutes). It budgets widget refreshes for battery and ignores requests to
   go faster; tapping always fetches fresh.
 
+## 8. A second instance, for someone else
+
+The app is single-user throughout - one Garmin account, one database, one
+password - so a second person runs as a second copy of it, not as a second
+account. They get their own checkout, their own `.env` and their own port,
+and the setup page collects their Garmin login so you never have to be told
+it.
+
+Use a separate directory, not a shared one. `config.py` calls `load_dotenv()`,
+which does not override real environment variables but does fill gaps, so a
+second `.env` missing `FITNESS_DB_PATH` would quietly write their data into
+your database.
+
+```bash
+# on the server, alongside your own copy
+cp -r fitness_by_ferenc fitness_by_them
+cd fitness_by_them
+rm -f fitness.db && rm -rf .garminconnect_tokens   # yours, if you copied it
+python3 -m venv venv && venv/bin/pip install -r requirements.txt
+```
+
+Their `.env` differs from yours in a handful of places, and leaves
+`GARMIN_EMAIL` and `GARMIN_PASSWORD` out entirely:
+
+```ini
+DASHBOARD_PORT=<a free port>
+FITNESS_DB_PATH=/path/to/fitness_by_them/fitness.db
+GARMIN_TOKENSTORE=/path/to/fitness_by_them/.garminconnect_tokens
+URL_PREFIX=/them
+SETUP_TOKEN=<generated below>
+USER_AGE=41                # theirs, not yours
+USER_EASY_PACE_MIN_PER_KM=6.5
+```
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(24))"
+```
+
+Copy `systemd/` again with the paths and port pointed at the new directory,
+give each unit a distinct name (`fitness-sync-them.service` and so on), and
+enable them as in step 4. Sync fails until they have signed in; that is
+expected, and the log line says `Reconnect at /setup`.
+
+Then give the path somewhere to go. The dashboard's proxy host in NPM has no
+Custom Locations - the hand-written rules live in
+NPM's `/data/nginx/custom/server_proxy.conf`, which NPM
+includes in *every* proxy host, so the rule needs the hostname guard:
+
+```nginx
+location /them {
+    if ($host != <dashboard-hostname>) { return 404; }
+    proxy_pass http://<server-lan-ip>:<their-port>;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+`proxy_pass` deliberately ends at the port with no path of its own, so the
+`/them` prefix survives - `URL_PREFIX` has put every route a level deep and
+stripping it here would 404 the lot. Then:
+
+```bash
+docker exec nginx-proxy-manager nginx -t
+docker exec nginx-proxy-manager nginx -s reload
+```
+
+Finally, in person, send them to
+`https://<dashboard-hostname>/them/setup?token=<the token>`. They enter
+their Garmin email and password, a verification code if Garmin asks for one,
+and then a username and password of their own choosing for the dashboard
+itself. The Garmin password is exchanged for a token and never written to
+disk; the dashboard password is stored only as a hash. Afterwards, remove
+`SETUP_TOKEN` from their `.env` and restart - the page then opens only for
+someone already signed in, which is what they will need when the Garmin
+session eventually expires.
+
+If they are on iOS and want the widget, their API path is
+`/them/api/today`, not `/api/today`.
+
+Worth saying out loud when you hand it over: none of this hides their data
+from whoever runs the server. Root can read the database and the token store.
+What it does mean is that their Garmin password is never spoken aloud, never
+stored, and never known to you.
+
 ## Notes / things that may need tuning
 
 - The unofficial `garminconnect` library logs in through Garmin's normal
@@ -164,6 +249,18 @@ Notes on how it authenticates:
   watching how the numbers track how you actually feel.
 - `fitness-sync.timer` runs every 30 minutes; that's frequent enough for
   strain to visibly climb through the day without hammering Garmin's servers.
+- The session cookie is named after `URL_PREFIX` rather than Flask's default
+  `session`, so that two instances sharing a hostname can't overwrite each
+  other's login. Deploying that change signs everyone out once.
+- An instance set up through `/setup` has no password to fall back on when
+  its Garmin tokens expire, so sync stops and the dashboard says so instead
+  of freezing on the last day that worked.
+- Submitting the setup form holds the request open while Garmin answers, and
+  gunicorn runs a single worker, so that instance serves nothing else for up
+  to `SETUP_LINK_TIMEOUT_SECONDS` (default 45). It only happens during setup,
+  and only on that person's instance - but don't run it with more than one
+  worker, because the MFA form would then land in a process that knows
+  nothing about the login waiting in another.
 - If a Garmin endpoint fails mid-sync (timeout, 404, etc.), that field is
   left as `None`/unknown rather than a false zero, and the dashboard shows a
   "Partial sync" notice naming which endpoints failed. If sync stops running

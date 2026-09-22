@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS daily (
@@ -27,6 +28,19 @@ CREATE TABLE IF NOT EXISTS daily (
     vo2max_date TEXT,
     recommendation_type TEXT,
     recommendation_detail TEXT,
+    updated_at TEXT
+);
+"""
+
+# Instance-level settings that aren't per-day data: the dashboard password
+# chosen on the setup page, and whether the stored Garmin session still
+# works. These live in the database rather than the .env because the whole
+# point of the setup page is that the person running the server never types
+# - or sees - the values.
+SETTINGS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
     updated_at TEXT
 );
 """
@@ -65,6 +79,7 @@ def get_conn(db_path):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
+    conn.execute(SETTINGS_SCHEMA)
     existing = {row[1] for row in conn.execute("PRAGMA table_info(daily)")}
     for column, coltype in MIGRATIONS:
         if column not in existing:
@@ -97,3 +112,17 @@ def get_recent_days(conn, before_date_str, limit=60):
         (before_date_str, limit),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_setting(conn, key, default=None):
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn, key, value):
+    conn.execute(
+        "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+        (key, value, datetime.now().isoformat(timespec="seconds")),
+    )
+    conn.commit()

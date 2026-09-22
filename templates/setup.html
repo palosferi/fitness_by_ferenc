@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect Garmin</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0a0a0b;
+    --card: #141518;
+    --line: #232428;
+    --text: #f2f2f3;
+    --muted: #8b8d94;
+    --blue: #5b8def;
+    --red: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 26px 22px;
+    width: 100%;
+    max-width: 360px;
+  }
+  h1 { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.45; }
+  .section {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    font-weight: 700;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+    margin-bottom: 14px;
+  }
+  .section:first-of-type { border-top: none; padding-top: 0; }
+  label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  input {
+    width: 100%;
+    background: #0e0f11;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--text);
+    font: inherit;
+    font-size: 16px; /* 16px keeps iOS from zooming on focus */
+    padding: 11px 12px;
+    margin-bottom: 16px;
+  }
+  input:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: transparent; }
+  button {
+    width: 100%;
+    background: var(--blue);
+    color: #08111f;
+    border: none;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 12px;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .error {
+    background: #3a1a1a;
+    border: 1px solid var(--red);
+    border-radius: 10px;
+    color: #ff8a8a;
+    font-size: 13px;
+    padding: 10px 12px;
+    margin-bottom: 18px;
+    line-height: 1.45;
+  }
+  .note {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin: 18px 0 0;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  .back { display: block; text-align: center; margin-top: 16px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <main class="card">
+  {% if step == "mfa" %}
+    <h1>Garmin wants a code</h1>
+    <p class="sub">Garmin has sent a verification code to your email or phone.
+       Enter it here - this page is still holding the sign-in open.</p>
+
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <form method="post" action="{{ url_for('dashboard.setup_mfa') }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <input type="hidden" name="pending" value="{{ pending }}">
+
+      <label for="code">Verification code</label>
+      <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+             autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus>
+
+      <button type="submit">Finish</button>
+    </form>
+  {% else %}
+    <h1>{% if needs_account %}Set up your dashboard{% else %}Reconnect Garmin{% endif %}</h1>
+    <p class="sub">
+      {% if needs_account %}
+        Your Garmin password is used once to get an access token, then discarded -
+        it is never saved on the server.
+      {% else %}
+        The stored Garmin session has expired. Sign in once more to renew it.
+      {% endif %}
+    </p>
+
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <form method="post" action="{{ url_for('dashboard.setup') }}" autocomplete="off">
+      <input type="hidden" name="token" value="{{ token }}">
+
+      <div class="section">Garmin Connect</div>
+
+      <label for="garmin_email">Garmin email</label>
+      <input id="garmin_email" name="garmin_email" type="email"
+             autocapitalize="none" autocorrect="off" spellcheck="false" required>
+
+      <label for="garmin_password">Garmin password</label>
+      <input id="garmin_password" name="garmin_password" type="password" required>
+
+      {% if needs_account %}
+      <div class="section">This dashboard</div>
+
+      <label for="dashboard_user">Choose a username</label>
+      <input id="dashboard_user" name="dashboard_user" type="text"
+             autocapitalize="none" autocorrect="off" spellcheck="false" required>
+
+      <label for="dashboard_password">Choose a password</label>
+      <input id="dashboard_password" name="dashboard_password" type="password" required>
+      {% endif %}
+
+      <button type="submit">Connect</button>
+    </form>
+
+    <p class="note">Signing in can take up to half a minute while Garmin
+       responds. If two-factor is on, you will be asked for a code next.</p>
+  {% endif %}
+
+    <a class="back" href="{{ url_for('dashboard.dashboard') }}">Back to the dashboard</a>
+  </main>
+</body>
+</html>

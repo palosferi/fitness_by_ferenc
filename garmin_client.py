@@ -10,6 +10,7 @@ of hanging) when run non-interactively (e.g. from the systemd timer).
 """
 
 import logging
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -30,13 +31,60 @@ def _prompt_mfa():
     return input("Enter Garmin MFA code: ").strip()
 
 
+class GarminNotLinked(RuntimeError):
+    """No usable stored session, and no credentials to make a new one.
+
+    Distinct from a login *failure* because the fix is different: somebody
+    has to sign in through the setup page again, and until they do there is
+    no point retrying every 30 minutes.
+    """
+
+
+def has_stored_session():
+    """Current library versions write a directory of token files, older ones
+    a single file - either counts as a session worth trying."""
+    path = config.GARMIN_TOKENSTORE
+    if os.path.isdir(path):
+        return bool(os.listdir(path))
+    return os.path.exists(path)
+
+
+def link_account(email, password, prompt_mfa):
+    """Trade an email and password for stored Garmin tokens, once.
+
+    Nothing here keeps the credentials: the library writes OAuth tokens to
+    the token store and every later run authenticates with those, so an
+    instance set up this way never has the password on disk at all.
+    """
+    garmin = Garmin(email=email, password=password, prompt_mfa=prompt_mfa)
+    garmin.login(config.GARMIN_TOKENSTORE)
+    return garmin
+
+
 def get_client():
+    """Resume the stored session, falling back to configured credentials.
+
+    An instance set up through the web page has no GARMIN_EMAIL at all, so
+    when its tokens eventually expire there is nothing to fall back to.
+    Raising GarminNotLinked rather than letting the library fail on an empty
+    password is what lets sync.py put a "sign in again" notice on the
+    dashboard instead of erroring into the journal twice an hour.
+    """
+    has_credentials = bool(config.GARMIN_EMAIL and config.GARMIN_PASSWORD)
+    if not has_credentials and not has_stored_session():
+        raise GarminNotLinked("No stored Garmin session and no configured credentials.")
+
     garmin = Garmin(
-        email=config.GARMIN_EMAIL,
-        password=config.GARMIN_PASSWORD,
+        email=config.GARMIN_EMAIL or "",
+        password=config.GARMIN_PASSWORD or "",
         prompt_mfa=_prompt_mfa,
     )
-    garmin.login(config.GARMIN_TOKENSTORE)
+    try:
+        garmin.login(config.GARMIN_TOKENSTORE)
+    except Exception as exc:
+        if not has_credentials:
+            raise GarminNotLinked(f"Stored Garmin session is no longer valid: {exc}") from exc
+        raise
     return garmin
 
 

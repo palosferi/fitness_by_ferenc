@@ -14,6 +14,7 @@ from datetime import date, datetime
 import config
 import storage
 from garmin_client import (
+    GarminNotLinked,
     extract_acwr,
     extract_body_battery,
     extract_garmin_readiness_score,
@@ -55,11 +56,30 @@ def _derived_baseline(rows, field):
     return sum(values) / len(values)
 
 
+def _record_link_state(state):
+    """Remember whether the stored Garmin session still works, so the
+    dashboard can say "sign in again" instead of silently freezing on the
+    last day that synced."""
+    conn = storage.get_conn(config.DB_PATH)
+    if storage.get_setting(conn, "garmin_link_state") != state:
+        storage.set_setting(conn, "garmin_link_state", state)
+
+
 def run():
     today = date.today()
     today_str = today.isoformat()
 
-    garmin = get_client()
+    try:
+        garmin = get_client()
+    except GarminNotLinked as exc:
+        # Nothing to retry against - an instance set up through the web page
+        # has no stored password to fall back on. Exit non-zero so the timer
+        # shows as failed rather than quietly doing nothing twice an hour.
+        _record_link_state("needs_login")
+        log.error("%s Reconnect at /setup.", exc)
+        raise SystemExit(1)
+
+    _record_link_state("linked")
     snapshot = fetch_daily_snapshot(garmin, today)
     fetch_errors = snapshot["errors"]
 

@@ -74,3 +74,29 @@ URL_PREFIX = os.environ.get("URL_PREFIX", "").rstrip("/")
 # client IP from X-Forwarded-For; must match reality or the throttle above
 # either blocks everyone at once or can be spoofed.
 PROXY_HOP_COUNT = int(os.environ.get("PROXY_HOP_COUNT", "1"))
+
+# Cookie identity. Two instances sharing one hostname under different
+# URL_PREFIX paths would otherwise both write a cookie called "session" at
+# "/", so signing into one silently overwrites the other's - and because each
+# instance signs with its own key, the clobbered side reads as anonymous and
+# quietly serves the demo day. That looks like broken data, not a broken
+# login, so the name is derived from the prefix and the cookie is scoped to
+# it. Renaming off Flask's default signs existing sessions out once.
+SESSION_COOKIE_NAME = os.environ.get(
+    "SESSION_COOKIE_NAME",
+    "fbf_session" + URL_PREFIX.replace("/", "_"),
+)
+SESSION_COOKIE_PATH = os.environ.get("SESSION_COOKIE_PATH", URL_PREFIX or "/")
+
+# Shared secret that opens /setup on an instance nobody has claimed yet, so
+# the person it's being handed to can enter their own Garmin credentials
+# instead of dictating them to whoever runs the server. Generate one, hand
+# over the URL in person, and drop it from the .env once they're set up.
+# Unset means /setup is reachable only by someone already signed in.
+SETUP_TOKEN = os.environ.get("SETUP_TOKEN")
+
+# How long a browser waits on the Garmin login running in the background
+# before the setup page gives up, and how long that background login waits
+# for an MFA code to be typed into the second form.
+SETUP_LINK_TIMEOUT_SECONDS = int(os.environ.get("SETUP_LINK_TIMEOUT_SECONDS", "45"))
+SETUP_MFA_TIMEOUT_SECONDS = int(os.environ.get("SETUP_MFA_TIMEOUT_SECONDS", "300"))
