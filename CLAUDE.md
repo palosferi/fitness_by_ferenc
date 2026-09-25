@@ -1,7 +1,7 @@
 # Notes for Claude
 
 Orientation lives in `README.md` (what the scores mean) and `docs/SETUP.md`
-(deployment). Tests are `pytest` from the repo root - 57 of them, all passing as of the
+(deployment). Tests are `pytest` from the repo root - 74 of them, all passing as of the
 last commit. There is no CI, and the two environments each lack something the
 suite wants: a dev checkout usually has no `garminconnect` (so the one test
 importing `sync` skips), and the server's venv is production-only with no
@@ -70,6 +70,29 @@ importing `sync` skips), and the server's venv is production-only with no
   `/api/today` fetch authenticates separately out of the iOS keychain, so the
   tile can read real while the tapped-through page reads demo - that split
   means a missing sign-in, not a bug.
+
+- **Infrastructure detail that can't live in a public repo** (the Cloudflare
+  firewall, the media path and its traps, options already ruled out) is in
+  the private `homelab-notes` repo, `fitness-infra.md`.
+
+---
+
+## Outstanding
+
+Left over when work moved off the laptop on 2026-09-25, which had no route to
+the server by then, so none of this was attempted:
+
+- **`/setup` is not known to be deployed.** The commit "Let the account holder
+  sign in to Garmin themselves" was never on the server as far as anyone
+  checked. Copy `app.py`, `config.py`, `garmin_client.py`, `storage.py`,
+  `sync.py` and `templates/setup.html`, restart the dashboard and sync units,
+  and check the existing sign-in still works - the session cookie is now named
+  (`fbf_session`), so browsers sign in once more; the widget uses basic auth
+  and is unaffected.
+- **The `laptop-handoff` branch is not merged into `main`.**
+- **The `/adventures` move to its own subdomain is still pending**; the DNS
+  request is the next step. Its handoff notes are in `homelab-notes`.
+- **The second-user instance below has not been started.**
 
 ---
 
