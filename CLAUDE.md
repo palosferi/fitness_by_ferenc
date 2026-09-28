@@ -100,11 +100,8 @@ in `~/fitness_by_ferenc_backup_20260928-095628.tgz` on the box. Still open:
   load environment files" and `backups/` doesn't exist. Fixing it needs sudo:
   replace `YOURUSER` with `palos` in `/etc/systemd/system/fitness-backup.service`,
   `systemctl daemon-reload`, then `systemctl start fitness-backup` once to
-  confirm. The other two units were installed correctly.
-- **The server `.env` repeats `DASHBOARD_USER` (three times) and
-  `DASHBOARD_PASSWORD` (twice).** Last one wins in both systemd and dotenv, so
-  it works, but the earlier lines are dead and misleading - tidy up when next
-  editing it.
+  confirm. The other two units were installed correctly. `palos` can't do
+  this over a non-interactive SSH - it needs a sudo password.
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
   request is the next step. Its handoff notes are in `homelab-notes`.
 - **The second-user instance below has not been started.**
