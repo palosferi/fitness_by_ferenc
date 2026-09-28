@@ -198,6 +198,9 @@
   .text-good { color: #5fd39b; }
   .text-watch { color: var(--amber); }
   .text-alert { color: #ff8a8a; }
+  .text-unknown { color: var(--muted); }
+  .tile-empty { cursor: default; }
+  .tile-empty:hover { border-color: var(--line); }
   @media (prefers-reduced-motion: reduce) { .tile-chevron { transition: none; } }
 
   /* ---- health monitor ---- */
@@ -344,9 +347,7 @@
   <div class="warning-badge">{{ warning }}</div>
   {% endif %}
 
-  {% if health_summary or stress %}
   <div class="monitors" id="monitors">
-    {% if health_summary %}
     <a class="tile" href="#health-detail">
       <span class="tile-head">
         <span class="tile-title">Health<br>Monitor</span>
@@ -358,7 +359,6 @@
       </span>
       <span class="tile-sub">{{ health_summary.count_text }}</span>
     </a>
-    {% endif %}
 
     {% if stress %}
     <a class="tile" href="#stress-detail">
@@ -372,10 +372,21 @@
       </span>
       <span class="tile-sub">{{ stress.time or "--:--" }}</span>
     </a>
+    {% else %}
+    {# Nothing to expand into, so the placeholder is not a link. #}
+    <div class="tile tile-empty">
+      <span class="tile-head">
+        <span class="tile-title">Stress<br>Monitor</span>
+      </span>
+      <span class="tile-status">
+        <span class="tile-badge text-unknown">--</span>
+        <span class="tile-status-text text-unknown">No Data</span>
+      </span>
+      <span class="tile-sub">--:--</span>
+    </div>
     {% endif %}
   </div>
 
-  {% if health_summary %}
   <div id="health-detail" class="detail">
   <div class="card">
     <div class="card-head">
@@ -409,7 +420,6 @@
     {% endfor %}
   </div>
   </div>
-  {% endif %}
 
   {% if stress %}
   <div id="stress-detail" class="detail">
@@ -443,7 +453,6 @@
     </div>
   </div>
   </div>
-  {% endif %}
   {% endif %}
 
   <div class="card">

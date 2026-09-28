@@ -233,12 +233,18 @@ def extract_stress(stress_data):
     The intraday array is what makes an honest "right now" tile possible:
     the day average stamped with our fetch time reads as a live measurement
     it isn't. Negative values mark stretches Garmin couldn't measure (during
-    activity, or the watch off the wrist), so they're skipped.
+    activity, or the watch off the wrist), so they're skipped. The same
+    sentinel turns up in the day's avg/max when there is no reading at all,
+    so those become None rather than a stress of -1.
     """
     data = stress_data or {}
+
+    def reading(value):
+        return value if value is not None and value >= 0 else None
+
     result = {
-        "avg": data.get("avgStressLevel"),
-        "max": data.get("maxStressLevel"),
+        "avg": reading(data.get("avgStressLevel")),
+        "max": reading(data.get("maxStressLevel")),
         "latest": None,
         "latest_at": None,
     }

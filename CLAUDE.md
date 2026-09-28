@@ -1,7 +1,7 @@
 # Notes for Claude
 
 Orientation lives in `README.md` (what the scores mean) and `docs/SETUP.md`
-(deployment). Tests are `pytest` from the repo root - 74 of them, all passing as of the
+(deployment). Tests are `pytest` from the repo root - 79 of them, all passing as of the
 last commit. There is no CI, and the two environments each lack something the
 suite wants: a dev checkout usually has no `garminconnect` (so the one test
 importing `sync` skips), and the server's venv is production-only with no
@@ -89,6 +89,11 @@ the server by then, so none of this was attempted:
   and check the existing sign-in still works - the session cookie is now named
   (`fbf_session`), so browsers sign in once more; the widget uses basic auth
   and is unaffected.
+- **The empty-day fix (2026-09-28) is not deployed.** It stops the stress
+  tile reading -1 and the Health Monitor tile vanishing when there is no
+  data. It touches `app.py`, `garmin_client.py` and
+  `templates/dashboard.html`, so it rides along with the `/setup` copy above
+  plus the template.
 - **The `laptop-handoff` branch is not merged into `main`.**
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
   request is the next step. Its handoff notes are in `homelab-notes`.

@@ -249,10 +249,19 @@ def health_metric(label, value, unit, baseline, icon, higher_is_better=True,
 
 
 def health_summary(metrics):
-    """Roll the rows up into the tile's one-glance verdict."""
+    """Roll the rows up into the tile's one-glance verdict.
+
+    Always returns a summary, so the tile keeps its place on a day with no
+    readings (or none that can be judged yet) instead of vanishing.
+    """
     scored = [m for m in metrics if m["status"] != "unknown"]
+    if not metrics:
+        return {"status": "unknown", "status_text": "No Data", "count_text": "no readings yet",
+                "detail_text": "No health readings for today yet"}
     if not scored:
-        return None
+        return {"status": "unknown", "status_text": "No Baseline",
+                "count_text": f"0/{len(metrics)} tracked",
+                "detail_text": f"{len(metrics)} shown, none with a baseline yet"}
     in_range = sum(1 for m in scored if m["status"] == "good")
     all_good = in_range == len(scored)
     # Only metrics with a baseline can be judged; the rest are shown but not
@@ -289,9 +298,10 @@ def stress_reading(value):
     """Reading plus the marker's x/y on a semicircular gauge.
 
     The trig lives here rather than in the template so the arc geometry is
-    testable and the markup stays declarative.
+    testable and the markup stays declarative. Garmin's "no reading" is -1,
+    and rows synced before extract_stress filtered it still carry it.
     """
-    if value is None:
+    if value is None or value < 0:
         return None
 
     pct = max(0, min(100, value))
@@ -504,10 +514,9 @@ def dashboard():
     else:
         stress["time"] = format_iso_as_local(today.get("stress_latest_at"))
         parts = []
-        if today.get("stress_avg") is not None:
-            parts.append(f"avg {round(today['stress_avg'])}")
-        if today.get("stress_max") is not None:
-            parts.append(f"peak {round(today['stress_max'])}")
+        for key, name in (("stress_avg", "avg"), ("stress_max", "peak")):
+            if today.get(key) is not None and today[key] >= 0:
+                parts.append(f"{name} {round(today[key])}")
         stress["caption"] = " · ".join(parts) if parts else None
 
     stats = [
