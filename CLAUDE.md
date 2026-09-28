@@ -20,7 +20,18 @@ importing `sync` skips), and the server's venv is production-only with no
   box was scp'd over, so `git pull` fails there. Deploy by copying individual
   files. Converting it to a real clone is safe whenever someone wants to -
   `.gitignore` already covers `.env`, `*.db`, `backups/` and the token store,
-  so a checkout would only overwrite tracked source.
+  so a checkout would only overwrite tracked source. Files copied from the
+  Windows laptop have CRLF endings, so a checksum against git reads as
+  "changed" when it isn't - compare with `tr -d '\r'` before assuming edits.
+
+- **`palos` has no passwordless sudo**, so `systemctl restart` is out from a
+  non-interactive session. It isn't needed: the dashboard unit runs gunicorn
+  as `palos` without `--preload`, so
+  `kill -HUP $(systemctl show -p MainPID --value fitness-dashboard)` boots a
+  fresh worker on the new code (the old one takes up to ~30s to drain). The
+  sync unit is a timer-driven oneshot and picks up new code on its next run;
+  `venv/bin/python sync.py` from the checkout runs one by hand. Only unit-file
+  or `.env` changes need a real restart, and so a sudo password.
 
 - **The dashboard uses no JavaScript, deliberately.** Expansion is `:target`
   CSS; the auto-reload is a `<meta http-equiv="refresh">`. The reason: the iOS
@@ -79,22 +90,21 @@ importing `sync` skips), and the server's venv is production-only with no
 
 ## Outstanding
 
-Left over when work moved off the laptop on 2026-09-25, which had no route to
-the server by then, so none of this was attempted:
+The server's runtime code matches `main` as of the empty-day fix
+(`dc5a78b`), deployed 2026-09-28 along with `/setup`; the pre-deploy code is
+in `~/fitness_by_ferenc_backup_20260928-095628.tgz` on the box. Still open:
 
-- **`/setup` is not known to be deployed.** The commit "Let the account holder
-  sign in to Garmin themselves" was never on the server as far as anyone
-  checked. Copy `app.py`, `config.py`, `garmin_client.py`, `storage.py`,
-  `sync.py` and `templates/setup.html`, restart the dashboard and sync units,
-  and check the existing sign-in still works - the session cookie is now named
-  (`fbf_session`), so browsers sign in once more; the widget uses basic auth
-  and is unaffected.
-- **The empty-day fix (2026-09-28) is not deployed.** It stops the stress
-  tile reading -1 and the Health Monitor tile vanishing when there is no
-  data. It touches `app.py`, `garmin_client.py` and
-  `templates/dashboard.html`, so it rides along with the `/setup` copy above
-  plus the template.
-- **The `laptop-handoff` branch is not merged into `main`.**
+- **The database has never been backed up.** The installed
+  `fitness-backup.service` still has the `/home/YOURUSER/...` template
+  placeholders, so it has failed every night since 2026-09-15 with "Failed to
+  load environment files" and `backups/` doesn't exist. Fixing it needs sudo:
+  replace `YOURUSER` with `palos` in `/etc/systemd/system/fitness-backup.service`,
+  `systemctl daemon-reload`, then `systemctl start fitness-backup` once to
+  confirm. The other two units were installed correctly.
+- **The server `.env` repeats `DASHBOARD_USER` (three times) and
+  `DASHBOARD_PASSWORD` (twice).** Last one wins in both systemd and dotenv, so
+  it works, but the earlier lines are dead and misleading - tidy up when next
+  editing it.
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
   request is the next step. Its handoff notes are in `homelab-notes`.
 - **The second-user instance below has not been started.**
