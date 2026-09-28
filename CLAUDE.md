@@ -94,14 +94,6 @@ The server's runtime code matches `main` as of the empty-day fix
 (`dc5a78b`), deployed 2026-09-28 along with `/setup`; the pre-deploy code is
 in `~/fitness_by_ferenc_backup_20260928-095628.tgz` on the box. Still open:
 
-- **The database has never been backed up.** The installed
-  `fitness-backup.service` still has the `/home/YOURUSER/...` template
-  placeholders, so it has failed every night since 2026-09-15 with "Failed to
-  load environment files" and `backups/` doesn't exist. Fixing it needs sudo:
-  replace `YOURUSER` with `palos` in `/etc/systemd/system/fitness-backup.service`,
-  `systemctl daemon-reload`, then `systemctl start fitness-backup` once to
-  confirm. The other two units were installed correctly. `palos` can't do
-  this over a non-interactive SSH - it needs a sudo password.
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
   request is the next step. Its handoff notes are in `homelab-notes`.
 - **The second-user instance below has not been started.**
