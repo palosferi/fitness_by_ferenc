@@ -1,11 +1,11 @@
 {
-  "name": "onlab",
+  "name": "fitness",
   "image": "mcr.microsoft.com/devcontainers/universal:2",
   "features": {
     "ghcr.io/tailscale/codespace/tailscale": {}
   },
   "postCreateCommand": "curl -fsSL https://claude.ai/install.sh | bash",
-  "postStartCommand": "sudo tailscale up --auth-key=$TS_AUTH_KEY --hostname=codespace-onlab || true",
+  "postStartCommand": "sudo tailscale up --auth-key=$TS_AUTH_KEY --hostname=codespace-fitness || true",
   "customizations": {
     "vscode": { "extensions": ["anthropic.claude-code"] }
   }
