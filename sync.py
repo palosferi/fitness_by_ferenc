@@ -8,8 +8,9 @@ repeatedly through the day - strain climbs as new HR data comes in,
 sleep score firms up once Garmin's finished processing last night.
 """
 
+import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import config
 import storage
@@ -20,6 +21,7 @@ from garmin_client import (
     extract_garmin_readiness_score,
     extract_hr_series,
     extract_hrv_balanced_range,
+    extract_off_wrist_gaps,
     extract_respiration,
     extract_resting_hr_baseline,
     extract_sleep_need,
@@ -32,13 +34,13 @@ from garmin_client import (
     get_client,
 )
 from scoring import (
-    calibration_k_from_history,
     compute_readiness,
     compute_trimp,
+    day_strain,
     fallback_sleep_score,
+    logged_sessions_trimp,
     recommend_sleep_hours,
     recommend_training,
-    trimp_to_strain,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -109,16 +111,19 @@ def run():
         # strain as unknown (None) rather than writing a false "zero effort"
         # day into history, which would corrupt both the calibration curve
         # and tomorrow's "yesterday_strain > 75" check.
-        trimp = None
+        hr_trimp = None
     else:
-        trimp = compute_trimp(hr_series, resting_hr or 55, max_hr, exponent=config.USER_TRIMP_EXPONENT) if hr_series else 0.0
+        hr_trimp = compute_trimp(hr_series, resting_hr or 55, max_hr, exponent=config.USER_TRIMP_EXPONENT) if hr_series else 0.0
 
     conn = storage.get_conn(config.DB_PATH)
     history = storage.get_recent_days(conn, today_str, limit=60)
 
+    # Sessions logged by hand for time the watch wasn't worn - no HR to
+    # double-count, so they simply add to what the watch recorded.
     trailing_trimps = [h["trimp"] for h in history if h.get("trimp") is not None]
-    calibration_k = calibration_k_from_history(trailing_trimps)
-    strain_score = trimp_to_strain(trimp, calibration_k) if trimp is not None else None
+    logged_trimp = logged_sessions_trimp(
+        storage.get_manual_activities(conn, [today_str]), config.USER_TRIMP_EXPONENT)
+    trimp, strain_score = day_strain(hr_trimp, logged_trimp, trailing_trimps)
 
     hrv_baseline = hrv_weekly
     if not hrv_baseline:
@@ -159,49 +164,54 @@ def run():
     respiration_avg = extract_respiration(snapshot["respiration"])
     spo2 = extract_spo2(snapshot["spo2"])
 
-    storage.upsert_day(
-        conn,
-        today_str,
-        {
-            "resting_hr": resting_hr,
-            "max_hr": max_hr,
-            "hrv_last_night": hrv_last_night,
-            "hrv_baseline": hrv_baseline,
-            "sleep_score": sleep_score,
-            "sleep_duration_min": sleep_fields["duration_min"],
-            "steps": steps,
-            "trimp": trimp,
-            "strain_score": strain_score,
-            "readiness_score": readiness,
-            "readiness_source": readiness_source,
-            "target_strain": rec["target_strain"],
-            "sleep_recommendation_hours": sleep_hours_rec,
-            "body_battery": body_battery["current"],
-            "body_battery_charged": body_battery["charged"],
-            "body_battery_drained": body_battery["drained"],
-            "stress_avg": stress_avg,
-            "stress_latest": stress["latest"],
-            "stress_latest_at": stress["latest_at"],
-            "stress_max": stress["max"],
-            "acwr_percent": acwr["percent"],
-            "acwr_feedback": acwr["feedback"],
-            "acute_load": acwr["acute_load"],
-            "vo2max": vo2max["value"],
-            "vo2max_date": vo2max["date"],
-            "respiration_avg": respiration_avg,
-            "resting_hr_baseline": resting_hr_baseline_garmin,
-            "hrv_balanced_low": hrv_range["low"],
-            "hrv_balanced_high": hrv_range["high"],
-            "sleep_need_minutes": sleep_need_minutes,
-            "watch_synced_at": watch_synced_at,
-            "spo2_avg": spo2["avg"],
-            "spo2_baseline": spo2["baseline"],
-            "recommendation_type": rec["activity"],
-            "recommendation_detail": rec["detail"],
-            "sync_errors": ",".join(fetch_errors) if fetch_errors else None,
-            "updated_at": datetime.now().isoformat(timespec="seconds"),
-        },
-    )
+    fields = {
+        "resting_hr": resting_hr,
+        "max_hr": max_hr,
+        "hrv_last_night": hrv_last_night,
+        "hrv_baseline": hrv_baseline,
+        "sleep_score": sleep_score,
+        "sleep_duration_min": sleep_fields["duration_min"],
+        "steps": steps,
+        "trimp": trimp,
+        "hr_trimp": hr_trimp,
+        "manual_trimp": logged_trimp,
+        "strain_score": strain_score,
+        "readiness_score": readiness,
+        "readiness_source": readiness_source,
+        "target_strain": rec["target_strain"],
+        "sleep_recommendation_hours": sleep_hours_rec,
+        "body_battery": body_battery["current"],
+        "body_battery_charged": body_battery["charged"],
+        "body_battery_drained": body_battery["drained"],
+        "stress_avg": stress_avg,
+        "stress_latest": stress["latest"],
+        "stress_latest_at": stress["latest_at"],
+        "stress_max": stress["max"],
+        "acwr_percent": acwr["percent"],
+        "acwr_feedback": acwr["feedback"],
+        "acute_load": acwr["acute_load"],
+        "vo2max": vo2max["value"],
+        "vo2max_date": vo2max["date"],
+        "respiration_avg": respiration_avg,
+        "resting_hr_baseline": resting_hr_baseline_garmin,
+        "hrv_balanced_low": hrv_range["low"],
+        "hrv_balanced_high": hrv_range["high"],
+        "sleep_need_minutes": sleep_need_minutes,
+        "watch_synced_at": watch_synced_at,
+        "spo2_avg": spo2["avg"],
+        "spo2_baseline": spo2["baseline"],
+        "recommendation_type": rec["activity"],
+        "recommendation_detail": rec["detail"],
+        "sync_errors": ",".join(fetch_errors) if fetch_errors else None,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    # A failed HR fetch says nothing about the watch being off - keep
+    # whatever gaps the last good fetch found.
+    if not hr_fetch_failed:
+        fields["off_wrist_gaps"] = json.dumps(
+            extract_off_wrist_gaps(snapshot["hr"], config.OFF_WRIST_REMINDER_MINUTES))
+    storage.upsert_day(conn, today_str, fields)
+    refresh_yesterday_gaps(garmin, conn, today - timedelta(days=1))
 
     log.info(
         "Synced %s: strain=%s (target %s) sleep=%s readiness=%s (%s) battery=%s stress=%s acwr=%s%% (%s) "
@@ -211,6 +221,19 @@ def run():
         steps, rec["activity"], sleep_hours_rec,
         f" [partial sync, failed: {', '.join(fetch_errors)}]" if fetch_errors else "",
     )
+
+
+def refresh_yesterday_gaps(garmin, conn, yesterday):
+    """An evening session without the watch often only reaches Garmin with
+    the next morning's upload, after yesterday's last sync - so re-read
+    yesterday's HR for its gaps. Strain for the day is left as it was."""
+    try:
+        hr = garmin.get_heart_rates(yesterday.isoformat()) or {}
+    except Exception as exc:
+        log.warning("yesterday's get_heart_rates failed: %s", exc)
+        return
+    gaps = extract_off_wrist_gaps(hr, config.OFF_WRIST_REMINDER_MINUTES)
+    storage.upsert_day(conn, yesterday.isoformat(), {"off_wrist_gaps": json.dumps(gaps)})
 
 
 if __name__ == "__main__":

@@ -44,6 +44,11 @@ ACWR_RISK_THRESHOLD_PERCENT = int(os.environ.get("ACWR_RISK_THRESHOLD_PERCENT", 
 # 30-minute sync timer interval, so a single missed/slow run doesn't flap it.
 SYNC_STALE_MINUTES = int(os.environ.get("SYNC_STALE_MINUTES", "75"))
 
+# A stretch this long with no heart rate puts a "log what you did" reminder
+# on the dashboard - for sessions the watch can't come to (basketball,
+# swimming), which would otherwise count as zero strain.
+OFF_WRIST_REMINDER_MINUTES = int(os.environ.get("OFF_WRIST_REMINDER_MINUTES", "30"))
+
 BACKUP_DIR = os.environ.get("BACKUP_DIR", str(BASE_DIR / "backups"))
 BACKUP_RETENTION_DAYS = int(os.environ.get("BACKUP_RETENTION_DAYS", "30"))
 

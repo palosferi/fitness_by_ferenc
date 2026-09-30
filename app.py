@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import logging
 import math
 import os
@@ -17,6 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import config
 import demo
+import scoring
 import storage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -170,6 +172,22 @@ def is_authenticated():
     if not auth or not auth.username or auth.password is None:
         return False
     return check_credentials(auth.username, auth.password)
+
+
+def csrf_token():
+    """Per-session token for the dashboard's forms. The session cookie alone
+    would let any other site post a logged workout on your behalf."""
+    if "csrf" not in session:
+        session["csrf"] = secrets.token_urlsafe(24)
+    return session["csrf"]
+
+
+app.jinja_env.globals["csrf_token"] = csrf_token
+
+
+def csrf_ok():
+    expected = session.get("csrf")
+    return bool(expected) and hmac.compare_digest(request.form.get("csrf", ""), expected)
 
 
 def ring_color(value, thresholds=(config.RING_LOW_THRESHOLD, config.RING_HIGH_THRESHOLD)):
@@ -415,6 +433,162 @@ def acwr_warning_text(percent, feedback, acute_load):
     return None
 
 
+# Borg CR10 wording for the effort picker.
+EFFORT_LABELS = {1: "very easy", 2: "easy", 3: "moderate", 4: "somewhat hard", 5: "hard",
+                 6: "hard", 7: "very hard", 8: "very hard", 9: "extremely hard", 10: "maximal"}
+MAX_LOGGED_MINUTES = 360
+# Reminders prefill the gap's length, but a gap this long is a forgotten or
+# charging watch, not a session - better an empty field than a wrong guess.
+PREFILL_MAX_MINUTES = 180
+
+
+def loggable_dates():
+    """Today and yesterday: an evening session is often only noticed the
+    next morning. Older days have already fed their strain into history."""
+    today = date.today()
+    return [(today - timedelta(days=1)).isoformat(), today.isoformat()]
+
+
+def day_word(date_str):
+    return "Today" if date_str == date.today().isoformat() else "Yesterday"
+
+
+def format_minutes(minutes):
+    minutes = int(round(minutes))
+    return f"{minutes} min" if minutes < 60 else format_duration(minutes)
+
+
+def stored_gaps(conn, date_str):
+    row = storage.get_day(conn, date_str) or {}
+    try:
+        return json.loads(row.get("off_wrist_gaps") or "[]")
+    except ValueError:
+        return []
+
+
+def find_gap(conn, date_str, gap_start):
+    return next((g for g in stored_gaps(conn, date_str) if g.get("start") == gap_start), None)
+
+
+def gap_reminders(conn, logged_sessions):
+    """Off-wrist stretches from today and yesterday not yet answered, either
+    by logging a session against them or by dismissing them."""
+    dates = loggable_dates()
+    answered = storage.get_dismissed_gap_starts(conn, dates)
+    answered |= {s["gap_start"] for s in logged_sessions if s.get("gap_start")}
+    reminders = []
+    for date_str in dates:
+        for gap in stored_gaps(conn, date_str):
+            if gap.get("start") in answered:
+                continue
+            minutes = gap.get("minutes") or 0
+            reminders.append({
+                "date": date_str,
+                "start": gap["start"],
+                "day": day_word(date_str),
+                "span": f"{format_iso_as_local(gap['start'])}\u2013{format_iso_as_local(gap.get('end'))}",
+                "duration": format_minutes(minutes),
+                "max_minutes": max(1, minutes),
+                "prefill": minutes if minutes <= PREFILL_MAX_MINUTES else None,
+            })
+    return reminders
+
+
+def refresh_day_strain(conn, date_str):
+    """Recompute a day's strain after a logged session changes, so the ring
+    moves now rather than at the next sync (which recomputes it anyway)."""
+    row = storage.get_day(conn, date_str) or {}
+    hr_trimp = row.get("hr_trimp")
+    if hr_trimp is None and not row.get("manual_trimp"):
+        hr_trimp = row.get("trimp")  # a row synced before sessions could be logged
+    logged = scoring.logged_sessions_trimp(
+        storage.get_manual_activities(conn, [date_str]), config.USER_TRIMP_EXPONENT)
+    history = storage.get_recent_days(conn, date_str, limit=60)
+    trimp, strain = scoring.day_strain(
+        hr_trimp, logged, [h["trimp"] for h in history if h.get("trimp") is not None])
+    fields = {"manual_trimp": logged}
+    if hr_trimp is not None:
+        fields.update(hr_trimp=hr_trimp, trimp=trimp, strain_score=strain)
+    storage.upsert_day(conn, date_str, fields)
+
+
+def form_int(name, low, high):
+    try:
+        value = int(request.form.get(name, ""))
+    except ValueError:
+        return None
+    return value if low <= value <= high else None
+
+
+def guard_form():
+    """None if the POST may proceed, else the response to send instead."""
+    if not is_authenticated():
+        return redirect(url_for("dashboard.login"))
+    if not csrf_ok():
+        return "This form expired - go back, reload the page and try again.", 400
+    return None
+
+
+def back_to_dashboard():
+    return redirect(url_for("dashboard.dashboard"), code=303)
+
+
+@bp.route("/activities", methods=["POST"])
+def log_activity():
+    refused = guard_form()
+    if refused:
+        return refused
+
+    conn = storage.get_conn(config.DB_PATH)
+    date_str = request.form.get("date")
+    if date_str not in loggable_dates():
+        return "Sessions can only be logged for today or yesterday.", 400
+
+    gap_start = request.form.get("gap_start") or None
+    max_minutes = MAX_LOGGED_MINUTES
+    if gap_start:
+        gap = find_gap(conn, date_str, gap_start)
+        if not gap:
+            return "That reminder no longer exists - reload the page.", 400
+        max_minutes = max(1, gap.get("minutes") or 0)
+
+    minutes = form_int("minutes", 1, max_minutes)
+    rpe = form_int("rpe", 1, 10)
+    if minutes is None or rpe is None:
+        return f"Minutes must be 1-{max_minutes} and effort 1-10.", 400
+    sport = (request.form.get("sport") or "").strip()[:40] or "Workout"
+
+    storage.add_manual_activity(conn, date_str, sport, minutes, rpe, gap_start)
+    refresh_day_strain(conn, date_str)
+    log.info("Logged %s: %s, %s min, effort %s", date_str, sport, minutes, rpe)
+    return back_to_dashboard()
+
+
+@bp.route("/activities/<int:activity_id>/delete", methods=["POST"])
+def delete_activity(activity_id):
+    refused = guard_form()
+    if refused:
+        return refused
+    conn = storage.get_conn(config.DB_PATH)
+    date_str = storage.delete_manual_activity(conn, activity_id)
+    if date_str:
+        refresh_day_strain(conn, date_str)
+    return back_to_dashboard()
+
+
+@bp.route("/gaps/dismiss", methods=["POST"])
+def dismiss_gap():
+    refused = guard_form()
+    if refused:
+        return refused
+    conn = storage.get_conn(config.DB_PATH)
+    date_str = request.form.get("date")
+    gap_start = request.form.get("gap_start")
+    if date_str in loggable_dates() and find_gap(conn, date_str, gap_start):
+        storage.dismiss_gap(conn, date_str, gap_start)
+    return back_to_dashboard()
+
+
 @bp.route("/api/today")
 def api_today():
     if not is_authenticated():
@@ -524,6 +698,14 @@ def dashboard():
         {"label": "Sleep target tonight", "value": format_duration(sleep_need)},
     ]
 
+    logged_sessions, reminders = [], []
+    if not demo_mode:
+        logged_sessions = storage.get_manual_activities(conn, loggable_dates())
+        reminders = gap_reminders(conn, logged_sessions)
+        for entry in logged_sessions:
+            entry["day"] = day_word(entry["date"])
+            entry["duration"] = format_minutes(entry["minutes"])
+
     warning = acwr_warning_text(today.get("acwr_percent"), today.get("acwr_feedback"), today.get("acute_load"))
 
     # A partial sync is the more urgent thing to say, so an expired Garmin
@@ -544,6 +726,10 @@ def dashboard():
         health_metrics=health_metrics,
         health_summary=health_summary(health_metrics),
         stress=stress,
+        gap_reminders=reminders,
+        logged_sessions=logged_sessions,
+        effort_labels=EFFORT_LABELS,
+        today_str=date.today().isoformat(),
         warning=warning,
         notice=notice,
         stale=False if demo_mode else is_stale(today.get("updated_at")),

@@ -72,7 +72,33 @@ MIGRATIONS = [
     ("stress_latest", "REAL"),
     ("stress_latest_at", "TEXT"),
     ("stress_max", "REAL"),
+    ("hr_trimp", "REAL"),
+    ("manual_trimp", "REAL"),
+    ("off_wrist_gaps", "TEXT"),
 ]
+
+# Sessions the watch never saw, logged by hand with a perceived effort.
+# gap_start ties an entry to the off-wrist reminder it answered.
+MANUAL_ACTIVITIES_SCHEMA = """
+CREATE TABLE IF NOT EXISTS manual_activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    sport TEXT NOT NULL,
+    minutes REAL NOT NULL,
+    rpe INTEGER NOT NULL,
+    gap_start TEXT,
+    created_at TEXT NOT NULL
+);
+"""
+
+# Off-wrist reminders answered with "not a workout" - charging, the shower.
+DISMISSED_GAPS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS dismissed_gaps (
+    gap_start TEXT PRIMARY KEY,
+    date TEXT NOT NULL,
+    dismissed_at TEXT NOT NULL
+);
+"""
 
 
 def get_conn(db_path):
@@ -80,6 +106,8 @@ def get_conn(db_path):
     conn.row_factory = sqlite3.Row
     conn.execute(SCHEMA)
     conn.execute(SETTINGS_SCHEMA)
+    conn.execute(MANUAL_ACTIVITIES_SCHEMA)
+    conn.execute(DISMISSED_GAPS_SCHEMA)
     existing = {row[1] for row in conn.execute("PRAGMA table_info(daily)")}
     for column, coltype in MIGRATIONS:
         if column not in existing:
@@ -126,3 +154,47 @@ def set_setting(conn, key, value):
         (key, value, datetime.now().isoformat(timespec="seconds")),
     )
     conn.commit()
+
+
+def add_manual_activity(conn, date_str, sport, minutes, rpe, gap_start=None):
+    conn.execute(
+        "INSERT INTO manual_activities (date, sport, minutes, rpe, gap_start, created_at) "
+        "VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        (date_str, sport, minutes, rpe, gap_start),
+    )
+    conn.commit()
+
+
+def get_manual_activities(conn, date_strs):
+    marks = ",".join("?" for _ in date_strs)
+    rows = conn.execute(
+        f"SELECT * FROM manual_activities WHERE date IN ({marks}) ORDER BY date DESC, id",
+        list(date_strs),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_manual_activity(conn, activity_id):
+    """Delete and return the removed row's date, or None if it didn't exist."""
+    row = conn.execute("SELECT date FROM manual_activities WHERE id = ?", (activity_id,)).fetchone()
+    if not row:
+        return None
+    conn.execute("DELETE FROM manual_activities WHERE id = ?", (activity_id,))
+    conn.commit()
+    return row["date"]
+
+
+def dismiss_gap(conn, date_str, gap_start):
+    conn.execute(
+        "INSERT OR IGNORE INTO dismissed_gaps (gap_start, date, dismissed_at) VALUES (?, ?, datetime('now'))",
+        (gap_start, date_str),
+    )
+    conn.commit()
+
+
+def get_dismissed_gap_starts(conn, date_strs):
+    marks = ",".join("?" for _ in date_strs)
+    rows = conn.execute(
+        f"SELECT gap_start FROM dismissed_gaps WHERE date IN ({marks})", list(date_strs)
+    ).fetchall()
+    return {r["gap_start"] for r in rows}

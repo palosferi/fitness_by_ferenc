@@ -293,6 +293,45 @@ def extract_body_battery(body_battery_entries):
     }
 
 
+def extract_off_wrist_gaps(hr_data, min_minutes):
+    """Stretches of at least min_minutes with no heart-rate reading - the
+    watch was off the wrist (or charging).
+
+    Garmin shows these two ways: explicit null samples, or simply no samples
+    between two readings, so a gap runs from one real reading to the next.
+    Leading and trailing null runs count too - an explicit null means the
+    watch was there to report nothing. The open end after the last upload
+    doesn't: Garmin just hasn't heard from the watch yet.
+
+    Returns [{"start", "end", "minutes"}] with UTC ISO timestamps.
+    """
+    values = sorted((e for e in (hr_data or {}).get("heartRateValues") or [] if e), key=lambda e: e[0])
+    if not values:
+        return []
+
+    spans = []
+    since = None  # last real reading, or the first explicit null before any
+    for ts_ms, hr in values:
+        if hr is None:
+            if since is None:
+                since = ts_ms
+            continue
+        if since is not None:
+            spans.append((since, ts_ms))
+        since = ts_ms
+    if values[-1][1] is None and since is not None:
+        spans.append((since, values[-1][0]))
+
+    def iso(ms):
+        return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+
+    return [
+        {"start": iso(start), "end": iso(end), "minutes": round((end - start) / 60000)}
+        for start, end in spans
+        if end - start >= min_minutes * 60000
+    ]
+
+
 def extract_hr_series(hr_data):
     """Return list of (hr_value, minutes_represented) pairs from intraday data."""
     values = hr_data.get("heartRateValues") or []

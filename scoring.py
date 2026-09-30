@@ -63,9 +63,51 @@ def compute_trimp(hr_minute_pairs, resting_hr, max_hr, exponent=TRIMP_EXPONENT):
         delta_ratio = hrr_fraction(hr, resting_hr, max_hr)
         if delta_ratio <= TRIMP_DEAD_ZONE:
             continue
-        weight = 0.64 * math.exp(exponent * delta_ratio)
-        trimp += minutes * delta_ratio * weight
+        trimp += minutes * _trimp_rate(delta_ratio, exponent)
     return round(trimp, 1)
+
+
+def _trimp_rate(delta_ratio, exponent):
+    """TRIMP accrued per minute at a given fraction of heart-rate reserve."""
+    return delta_ratio * 0.64 * math.exp(exponent * delta_ratio)
+
+
+# Session RPE (Borg CR10, 1-10) to the heart-rate-reserve fraction it
+# corresponds to, following ACSM's intensity table: light ~30-39% HRR,
+# moderate 40-59%, vigorous 60-89%, near-maximal 90%+. Used for sessions
+# the watch never saw (basketball, swimming without it), so they land on
+# the same TRIMP scale - and the same calibration - as recorded heart rate.
+RPE_TO_HRR = {1: 0.25, 2: 0.32, 3: 0.40, 4: 0.47, 5: 0.54,
+              6: 0.62, 7: 0.70, 8: 0.79, 9: 0.88, 10: 0.95}
+
+
+def manual_trimp(minutes, rpe, exponent=TRIMP_EXPONENT):
+    """TRIMP for a logged session: its duration held at the HRR its
+    perceived effort implies. Team sports are intermittent, but session RPE
+    is rated for the session as a whole, so a flat equivalent is the honest
+    reading of it."""
+    fraction = RPE_TO_HRR.get(rpe)
+    if not fraction or not minutes or minutes <= 0:
+        return 0.0
+    return round(minutes * _trimp_rate(fraction, exponent), 1)
+
+
+
+def logged_sessions_trimp(sessions, exponent=TRIMP_EXPONENT):
+    """Total TRIMP of logged sessions (dicts with "minutes" and "rpe")."""
+    return round(sum(manual_trimp(s["minutes"], s["rpe"], exponent) for s in sessions), 1)
+
+
+def day_strain(hr_trimp, logged_trimp, trailing_trimps):
+    """(total TRIMP, strain) for a day: watch-recorded plus logged sessions.
+
+    Unknown HR (a failed fetch) keeps the whole day unknown rather than
+    letting a logged session pass for the day's total.
+    """
+    if hr_trimp is None:
+        return None, None
+    total = round(hr_trimp + (logged_trimp or 0.0), 1)
+    return total, trimp_to_strain(total, calibration_k_from_history(trailing_trimps))
 
 
 def calibration_k_from_history(trailing_trimps, default_k=DEFAULT_TRIMP_K):
