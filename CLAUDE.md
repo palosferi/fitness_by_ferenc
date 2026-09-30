@@ -1,7 +1,7 @@
 # Notes for Claude
 
 Orientation lives in `README.md` (what the scores mean) and `docs/SETUP.md`
-(deployment). Tests are `pytest` from the repo root - 79 of them, all passing as of the
+(deployment). Tests are `pytest` from the repo root - 109 of them, all passing as of the
 last commit. There is no CI, and the two environments each lack something the
 suite wants: a dev checkout usually has no `garminconnect` (so the one test
 importing `sync` skips), and the server's venv is production-only with no
@@ -90,9 +90,11 @@ importing `sync` skips), and the server's venv is production-only with no
 
 ## Outstanding
 
-The server's runtime code matches `main` as of the empty-day fix
-(`dc5a78b`), deployed 2026-09-28 along with `/setup`; the pre-deploy code is
-in `~/fitness_by_ferenc_backup_20260928-095628.tgz` on the box. Still open:
+The server's runtime code matches `main` as of the logged-session strain
+work (off-wrist reminders, `/activities`), deployed 2026-09-30; the pre-deploy
+code and DB are in `~/fitness_by_ferenc_backup_20260930-103128.tgz` on the
+box. Pull before deploying - a stale checkout copied over the server undoes
+whatever landed from elsewhere. Still open:
 
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
   request is the next step. Its handoff notes are in `homelab-notes`.
