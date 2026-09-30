@@ -14,8 +14,8 @@ by plain, documented formulas.
     duration/stages fallback.
   - **Readiness** (1-100, internal) - blends sleep, HRV vs. your 7-day
     baseline, and resting HR vs. baseline.
-  - A **training recommendation** (rest / gym / run, with distance+time for
-    runs) derived from readiness and yesterday's strain.
+  - A **daily effort level** (0 = rest, 10 = all out) derived from
+    readiness and yesterday's strain - how hard to go, whatever the sport.
 - Serves a small dashboard (4 rings + recommendation) and a JSON API.
 - Ships an iOS Scriptable widget that reads the JSON API over Tailscale, so
   you get the numbers on your Home Screen without opening any app.

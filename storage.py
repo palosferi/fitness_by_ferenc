@@ -75,6 +75,7 @@ MIGRATIONS = [
     ("hr_trimp", "REAL"),
     ("manual_trimp", "REAL"),
     ("off_wrist_gaps", "TEXT"),
+    ("recommended_effort", "INTEGER"),
 ]
 
 # Sessions the watch never saw, logged by hand with a perceived effort.

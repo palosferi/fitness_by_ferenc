@@ -163,39 +163,60 @@ def compute_readiness(sleep_score, hrv_last_night, hrv_baseline, resting_hr, res
     return round(readiness, 1)
 
 
-def recommend_training(readiness, yesterday_strain, recent_rest_count, easy_pace_min_per_km=6.0):
-    target_strain = readiness
-    if yesterday_strain is not None and yesterday_strain > 75:
-        target_strain -= 15
-    target_strain = max(5, min(95, target_strain))
+# Each effort level's name and what it asks of you. The scale is the same
+# 1-10 perceived effort used to log a session without the watch, so "effort
+# 6 today" and "logged at effort 6" mean the same thing. It says how hard,
+# not what - the sport is yours to pick.
+EFFORT_GUIDANCE = {
+    0: ("rest", "No exercise today. A walk is fine."),
+    1: ("very easy", "Easy movement only - a walk, mobility, stretching."),
+    2: ("easy", "Easy movement only - a walk, mobility, stretching."),
+    3: ("light", "Keep it easy enough to hold a conversation throughout."),
+    4: ("light", "Keep it easy enough to hold a conversation throughout."),
+    5: ("moderate", "A solid session, but stop short of pushing hard."),
+    6: ("moderate", "A solid session, but stop short of pushing hard."),
+    7: ("hard", "A demanding session is fine - push, but leave a little in the tank."),
+    8: ("hard", "A demanding session is fine - push, but leave a little in the tank."),
+    9: ("very hard", "Well recovered - go hard."),
+    10: ("all out", "Fully recovered - go as hard as you like."),
+}
 
-    if target_strain <= 30:
-        activity = "rest"
-        detail = "Recovery day: light walk or full rest. No structured training."
-    elif target_strain <= 55:
-        if recent_rest_count >= 2:
-            activity = "gym"
-            detail = "Light gym session: mobility + light strength (~30-40 min), keep effort easy."
-        else:
-            activity = "run"
-            duration_min = 30
-            distance_km = round(duration_min / easy_pace_min_per_km, 1)
-            detail = f"Easy run: {distance_km} km / {duration_min} min at an easy, conversational pace."
-    elif target_strain <= 75:
-        activity = "run"
-        duration_min = 45
-        distance_km = round(duration_min / easy_pace_min_per_km, 1)
-        detail = f"Moderate run: {distance_km} km / {duration_min} min, comfortably hard."
-    else:
-        activity = "run"
-        duration_min = 60
-        distance_km = round(duration_min / (easy_pace_min_per_km * 0.9), 1)
-        detail = f"Hard session: {distance_km} km / {duration_min} min with intervals, or a heavy gym session."
+# Target strain at or below REST_TARGET is a rest day (level 0); the scale
+# then climbs linearly to 10 at the clamp ceiling.
+REST_TARGET = 30
+MAX_TARGET = 95
+
+
+def effort_prefix(effort):
+    """The "Effort 6/10, moderate. " lead-in of a stored recommendation,
+    which the dashboard strips because it shows the level on its own."""
+    return f"Effort {effort}/10, {EFFORT_GUIDANCE[effort][0]}. "
+
+
+def recommend_training(readiness, yesterday_strain):
+    """How hard to go today, 0 (no exercise) to 10 (all out).
+
+    Target strain starts at readiness and drops 15 after a very hard day, so
+    one big session isn't immediately followed by another.
+    """
+    target_strain = readiness
+    eased = yesterday_strain is not None and yesterday_strain > 75
+    if eased:
+        target_strain -= 15
+    target_strain = max(5, min(MAX_TARGET, target_strain))
+
+    fraction = (target_strain - REST_TARGET) / (MAX_TARGET - REST_TARGET)
+    effort = max(0, min(10, math.floor(fraction * 10 + 0.5)))
+    advice = EFFORT_GUIDANCE[effort][1]
+    if eased:
+        advice += " Eased off after yesterday's hard day."
 
     return {
-        "activity": activity,
+        "activity": "rest" if effort == 0 else "train",
+        "effort": effort,
         "target_strain": round(target_strain, 1),
-        "detail": detail,
+        # Self-contained, for the widget and /api/today.
+        "detail": f"{effort_prefix(effort)}{advice}",
     }
 
 

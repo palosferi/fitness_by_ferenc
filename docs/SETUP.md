@@ -22,7 +22,6 @@ nano .env
 Fill in:
 - `GARMIN_EMAIL` / `GARMIN_PASSWORD` - your normal Garmin Connect login.
 - `USER_AGE` (or `USER_MAX_HR` if you know your real tested max HR).
-- `USER_EASY_PACE_MIN_PER_KM` - your typical easy run pace.
 - `FITNESS_DB_PATH` / `GARMIN_TOKENSTORE` - absolute paths, e.g. `/home/<you>/fitness_by_ferenc/fitness.db`.
 
 ## 3. First login (do this interactively, not via systemd)
@@ -132,7 +131,7 @@ Tailscale (section 5) still works as a private fallback if the proxy is down.
    `/#stress-detail` - and the page loads with that panel already expanded.
 
 The tile shows three rings - Sleep, Recovery, Strain - plus today's
-recommendation and a steps/sleep-target footer.
+effort level and a steps/sleep-target footer.
 
 Notes on how it authenticates:
 - The widget sends HTTP basic auth on the API call, so it gets **your** data.
@@ -182,7 +181,6 @@ GARMIN_TOKENSTORE=/path/to/fitness_by_them/.garminconnect_tokens
 URL_PREFIX=/them
 SETUP_TOKEN=<generated below>
 USER_AGE=41                # theirs, not yours
-USER_EASY_PACE_MIN_PER_KM=6.5
 ```
 
 ```bash

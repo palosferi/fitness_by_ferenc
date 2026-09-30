@@ -141,9 +141,8 @@ def run():
 
     yesterday = history[0] if history else None
     yesterday_strain = yesterday["strain_score"] if yesterday else None
-    recent_rest_count = sum(1 for h in history[:3] if h.get("recommendation_type") == "rest")
 
-    rec = recommend_training(readiness, yesterday_strain, recent_rest_count, config.USER_EASY_PACE_MIN_PER_KM)
+    rec = recommend_training(readiness, yesterday_strain)
 
     hrv_range = extract_hrv_balanced_range(snapshot["hrv"])
     resting_hr_baseline_garmin = extract_resting_hr_baseline(stats)
@@ -202,6 +201,7 @@ def run():
         "spo2_baseline": spo2["baseline"],
         "recommendation_type": rec["activity"],
         "recommendation_detail": rec["detail"],
+        "recommended_effort": rec["effort"],
         "sync_errors": ",".join(fetch_errors) if fetch_errors else None,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }
@@ -215,10 +215,10 @@ def run():
 
     log.info(
         "Synced %s: strain=%s (target %s) sleep=%s readiness=%s (%s) battery=%s stress=%s acwr=%s%% (%s) "
-        "vo2max=%s steps=%s rec=%s sleep_target=%sh%s",
+        "vo2max=%s steps=%s effort=%s sleep_target=%sh%s",
         today_str, strain_score, rec["target_strain"], sleep_score, readiness, readiness_source,
         body_battery["current"], stress_avg, acwr["percent"], acwr["feedback"], vo2max["value"],
-        steps, rec["activity"], sleep_hours_rec,
+        steps, rec["effort"], sleep_hours_rec,
         f" [partial sync, failed: {', '.join(fetch_errors)}]" if fetch_errors else "",
     )
 

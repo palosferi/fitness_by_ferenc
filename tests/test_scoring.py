@@ -119,31 +119,45 @@ def test_compute_readiness_penalizes_elevated_resting_hr():
 
 # ---- recommend_training ----------------------------------------------------
 
-@pytest.mark.parametrize("readiness,expected_activity", [
-    (20, "rest"),
-    (50, "run"),
-    (65, "run"),
-    (90, "run"),
+@pytest.mark.parametrize("readiness,expected_effort", [
+    (20, 0),
+    (30, 0),
+    (58, 4),
+    (79, 8),
+    (100, 10),
 ])
-def test_recommend_training_activity_bands(readiness, expected_activity):
-    rec = scoring.recommend_training(readiness, yesterday_strain=None, recent_rest_count=0)
-    assert rec["activity"] == expected_activity
+def test_recommend_training_effort_levels(readiness, expected_effort):
+    rec = scoring.recommend_training(readiness, yesterday_strain=None)
+    assert rec["effort"] == expected_effort
+    assert rec["activity"] == ("rest" if expected_effort == 0 else "train")
 
 
-def test_recommend_training_suggests_gym_after_rest_streak():
-    rec = scoring.recommend_training(readiness=45, yesterday_strain=None, recent_rest_count=2)
-    assert rec["activity"] == "gym"
+def test_recommend_training_effort_never_decreases_with_readiness():
+    efforts = [scoring.recommend_training(r, yesterday_strain=None)["effort"] for r in range(0, 101)]
+    assert efforts == sorted(efforts)
+    assert set(efforts) == set(range(11))
+
+
+def test_recommend_training_detail_names_the_level():
+    rec = scoring.recommend_training(readiness=58, yesterday_strain=None)
+    assert rec["detail"].startswith("Effort 4/10, light.")
+    assert "run" not in rec["detail"].lower()
+
+
+def test_recommend_training_says_when_it_eased_off():
+    rec = scoring.recommend_training(readiness=80, yesterday_strain=90)
+    assert "yesterday's hard day" in rec["detail"]
 
 
 def test_recommend_training_pulls_target_down_after_hard_day():
-    baseline = scoring.recommend_training(readiness=80, yesterday_strain=None, recent_rest_count=0)
-    after_hard_day = scoring.recommend_training(readiness=80, yesterday_strain=90, recent_rest_count=0)
+    baseline = scoring.recommend_training(readiness=80, yesterday_strain=None)
+    after_hard_day = scoring.recommend_training(readiness=80, yesterday_strain=90)
     assert after_hard_day["target_strain"] == baseline["target_strain"] - 15
 
 
 def test_recommend_training_target_strain_is_clamped():
-    rec_low = scoring.recommend_training(readiness=0, yesterday_strain=100, recent_rest_count=0)
-    rec_high = scoring.recommend_training(readiness=100, yesterday_strain=None, recent_rest_count=0)
+    rec_low = scoring.recommend_training(readiness=0, yesterday_strain=100)
+    rec_high = scoring.recommend_training(readiness=100, yesterday_strain=None)
     assert rec_low["target_strain"] >= 5
     assert rec_high["target_strain"] <= 95
 

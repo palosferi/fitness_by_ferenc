@@ -15,7 +15,6 @@ GARMIN_PASSWORD = os.environ.get("GARMIN_PASSWORD")
 
 USER_AGE = int(os.environ.get("USER_AGE", "32"))
 USER_MAX_HR = int(os.environ.get("USER_MAX_HR", str(220 - USER_AGE)))
-USER_EASY_PACE_MIN_PER_KM = float(os.environ.get("USER_EASY_PACE_MIN_PER_KM", "6.0"))
 
 # Banister TRIMP exponential constant - 1.92 is the standard "male" value,
 # 1.67 is typically used for women. A genuine per-user knob, unlike the

@@ -706,6 +706,18 @@ def dashboard():
             entry["day"] = day_word(entry["date"])
             entry["duration"] = format_minutes(entry["minutes"])
 
+    # Rows synced before the effort scale existed have only the old run
+    # prescription; they fall back to showing its text as-is.
+    effort = today.get("recommended_effort")
+    effort_view = None
+    if effort in scoring.EFFORT_GUIDANCE:
+        detail = today.get("recommendation_detail") or ""
+        effort_view = {
+            "value": effort,
+            "label": scoring.EFFORT_GUIDANCE[effort][0],
+            "advice": detail.removeprefix(scoring.effort_prefix(effort)) or scoring.EFFORT_GUIDANCE[effort][1],
+        }
+
     warning = acwr_warning_text(today.get("acwr_percent"), today.get("acwr_feedback"), today.get("acute_load"))
 
     # A partial sync is the more urgent thing to say, so an expired Garmin
@@ -736,6 +748,7 @@ def dashboard():
         demo_mode=demo_mode,
         recommendation=today.get("recommendation_detail") or "No data yet today - waiting for first sync.",
         recommendation_type=today.get("recommendation_type"),
+        effort=effort_view,
         synced_at=format_synced_at(today.get("updated_at")),
         watch_synced_at=format_gmt_as_local(today.get("watch_synced_at")),
     )

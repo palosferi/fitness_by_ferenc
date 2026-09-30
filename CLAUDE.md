@@ -1,7 +1,7 @@
 # Notes for Claude
 
 Orientation lives in `README.md` (what the scores mean) and `docs/SETUP.md`
-(deployment). Tests are `pytest` from the repo root - 109 of them, all passing as of the
+(deployment). Tests are `pytest` from the repo root - 116 of them, all passing as of the
 last commit. There is no CI, and the two environments each lack something the
 suite wants: a dev checkout usually has no `garminconnect` (so the one test
 importing `sync` skips), and the server's venv is production-only with no
@@ -90,8 +90,8 @@ importing `sync` skips), and the server's venv is production-only with no
 
 ## Outstanding
 
-The server's runtime code matches `main` as of the logged-session strain
-work (off-wrist reminders, `/activities`), deployed 2026-09-30; the pre-deploy
+The server's runtime code matches `main` as of the 0-10 effort level that
+replaced the run prescription, deployed 2026-09-30; the pre-deploy
 code and DB are in `~/fitness_by_ferenc_backup_20260930-103128.tgz` on the
 box. Pull before deploying - a stale checkout copied over the server undoes
 whatever landed from elsewhere. Still open:
@@ -112,15 +112,15 @@ has both HRV Status and Training Readiness (the latter arrived in firmware
 overnight wear before a baseline exists, and that cold start is the real
 problem: with no HRV, `compute_readiness()` (scoring.py) substitutes a flat
 `hrv_component = 60`, readiness parks at 60-70, and `recommend_training()`
-emits "Moderate run, 45 min" every single day for three weeks. Body Battery is
+emits effort 5 every single day for three weeks. Body Battery is
 available from day one and on the same 0-100 scale - the day's peak is roughly
 the wake value - so it's the natural stand-in.
 
 Other adjustments that setup needs:
 
-- `recommend_training()` is run-centric; three of its four bands prescribe
-  running and the top one prescribes intervals. A non-runner in his sixties
-  needs a modality knob, and that top band deserves a cap regardless.
+- `recommend_training()` now gives a sport-agnostic 0-10 effort level
+  rather than runs, so no modality knob is needed - but its top end ("all
+  out") deserves a cap for someone in his sixties.
 - `USER_MAX_HR` defaults to `220 - age` (config.py), which drifts badly past
   40 and is the denominator of every TRIMP calculation. Prefer Tanaka
   (`208 - 0.7 x age`) or a measured value.

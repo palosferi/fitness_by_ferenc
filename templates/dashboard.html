@@ -141,6 +141,13 @@
     flex: none;
   }
   .rec-detail { font-size: 16px; line-height: 1.45; }
+  .effort-head { display: flex; align-items: baseline; gap: 2px; margin-bottom: 10px; }
+  .effort-value { font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .effort-scale { font-size: 15px; color: var(--muted); font-weight: 600; }
+  .effort-label { margin-left: 10px; font-size: 15px; font-weight: 600; color: var(--blue); }
+  .effort-bar { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; margin-bottom: 12px; }
+  .effort-bar span { height: 6px; border-radius: 3px; background: #26272c; }
+  .effort-bar span.on { background: var(--blue); }
 
   /* ---- monitor tiles ---- */
   .monitors { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
@@ -536,8 +543,33 @@
   {% endif %}
 
   <div class="card">
+    {% if effort %}
+    <div class="card-title">Effort today</div>
+    <div class="effort-head">
+      <span class="effort-value">{{ effort.value }}</span><span class="effort-scale">/10</span>
+      <span class="effort-label">{{ effort.label }}</span>
+    </div>
+    <div class="effort-bar" role="img" aria-label="Effort {{ effort.value }} of 10">
+      {% for i in range(1, 11) %}<span class="{{ 'on' if i <= effort.value else '' }}"></span>{% endfor %}
+    </div>
+    <div class="rec-detail">{{ effort.advice }}</div>
+    {% else %}
     <div class="card-title">{{ recommendation_type or "Recommendation" }}</div>
     <div class="rec-detail">{{ recommendation }}</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="stats">
+      {% for s in stats %}
+        {% if s.value is not none %}
+        <div>
+          <div class="stat-label">{{ s.label }}</div>
+          <div class="stat-value">{{ s.value }}</div>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
   </div>
 
   {% if not demo_mode %}
@@ -578,19 +610,6 @@
     </datalist>
   </div>
   {% endif %}
-
-  <div class="card">
-    <div class="stats">
-      {% for s in stats %}
-        {% if s.value is not none %}
-        <div>
-          <div class="stat-label">{{ s.label }}</div>
-          <div class="stat-value">{{ s.value }}</div>
-        </div>
-        {% endif %}
-      {% endfor %}
-    </div>
-  </div>
 
 </div>
 </body>
