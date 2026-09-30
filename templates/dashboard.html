@@ -159,7 +159,8 @@
     text-decoration: none;
     -webkit-tap-highlight-color: transparent;
   }
-  .tile:hover { border-color: #33353c; }
+  .tile-slot { position: relative; display: grid; }
+  .tile-slot:hover .tile { border-color: #33353c; }
   .tile:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   .tile-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
   .tile-title {
@@ -183,6 +184,14 @@
      the document. Where :has() is unsupported the chevron simply stays put. */
   body:has(#health-detail:target) .tile[href="#health-detail"] .tile-chevron,
   body:has(#stress-detail:target) .tile[href="#stress-detail"] .tile-chevron { transform: rotate(90deg); }
+  /* A link can't change its own href without script, so tapping an open tile
+     to collapse it is a second link laid over the tile, revealed only while
+     its panel is open. Without :has() it stays hidden and the panel's Close
+     link is the way out. */
+  .tile-collapse { display: none; position: absolute; inset: 0; border-radius: 16px; -webkit-tap-highlight-color: transparent; }
+  .tile-collapse:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  body:has(#health-detail:target) .tile[href="#health-detail"] + .tile-collapse,
+  body:has(#stress-detail:target) .tile[href="#stress-detail"] + .tile-collapse { display: block; }
   .tile-status { display: flex; align-items: center; gap: 7px; }
   .tile-status-text { font-size: 13px; font-weight: 700; letter-spacing: 0.01em; }
   .tile-check { width: 17px; height: 17px; border-radius: 50%; flex: none; display: grid; place-items: center; }
@@ -348,30 +357,36 @@
   {% endif %}
 
   <div class="monitors" id="monitors">
-    <a class="tile" href="#health-detail">
-      <span class="tile-head">
-        <span class="tile-title">Health<br>Monitor</span>
-        <span class="tile-chevron">{% include "icons/chevron.svg" %}</span>
-      </span>
-      <span class="tile-status">
-        <span class="tile-check {{ health_summary.status }}">{%- if health_summary.status == "good" -%}{% include "icons/check.svg" %}{%- else -%}{% include "icons/alert.svg" %}{%- endif -%}</span>
-        <span class="tile-status-text text-{{ health_summary.status }}">{{ health_summary.status_text }}</span>
-      </span>
-      <span class="tile-sub">{{ health_summary.count_text }}</span>
-    </a>
+    <div class="tile-slot">
+      <a class="tile" href="#health-detail">
+        <span class="tile-head">
+          <span class="tile-title">Health<br>Monitor</span>
+          <span class="tile-chevron">{% include "icons/chevron.svg" %}</span>
+        </span>
+        <span class="tile-status">
+          <span class="tile-check {{ health_summary.status }}">{%- if health_summary.status == "good" -%}{% include "icons/check.svg" %}{%- else -%}{% include "icons/alert.svg" %}{%- endif -%}</span>
+          <span class="tile-status-text text-{{ health_summary.status }}">{{ health_summary.status_text }}</span>
+        </span>
+        <span class="tile-sub">{{ health_summary.count_text }}</span>
+      </a>
+      <a class="tile-collapse" href="#monitors" aria-label="Collapse Health Monitor"></a>
+    </div>
 
     {% if stress %}
-    <a class="tile" href="#stress-detail">
-      <span class="tile-head">
-        <span class="tile-title">Stress<br>Monitor</span>
-        <span class="tile-chevron">{% include "icons/chevron.svg" %}</span>
-      </span>
-      <span class="tile-status">
-        <span class="tile-badge" style="color: {{ stress.color }};">{{ stress.value }}</span>
-        <span class="tile-status-text" style="color: {{ stress.color }};">{{ stress.label }}</span>
-      </span>
-      <span class="tile-sub">{{ stress.time or "--:--" }}</span>
-    </a>
+    <div class="tile-slot">
+      <a class="tile" href="#stress-detail">
+        <span class="tile-head">
+          <span class="tile-title">Stress<br>Monitor</span>
+          <span class="tile-chevron">{% include "icons/chevron.svg" %}</span>
+        </span>
+        <span class="tile-status">
+          <span class="tile-badge" style="color: {{ stress.color }};">{{ stress.value }}</span>
+          <span class="tile-status-text" style="color: {{ stress.color }};">{{ stress.label }}</span>
+        </span>
+        <span class="tile-sub">{{ stress.time or "--:--" }}</span>
+      </a>
+      <a class="tile-collapse" href="#monitors" aria-label="Collapse Stress Monitor"></a>
+    </div>
     {% else %}
     {# Nothing to expand into, so the placeholder is not a link. #}
     <div class="tile tile-empty">
