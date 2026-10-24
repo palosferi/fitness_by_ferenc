@@ -94,9 +94,10 @@ importing `sync` skips), and the server's venv is production-only with no
 
 ## Outstanding
 
-The server's runtime code matches `main` as of the lights-out/wake
-recommendation, deployed 2026-10-24; the pre-deploy code and DB are in
-`~/fitness_by_ferenc_backup_20261024-123758.tgz` on the box. Pull before deploying - a stale checkout copied over the server undoes
+The server's runtime code matches `main` as of the wake-time nudge toward
+`TARGET_WAKE_TIME` (set to 07:30 in the server's `.env`), deployed
+2026-10-24; the pre-deploy code and DB are in
+`~/fitness_by_ferenc_backup_20261024-125742.tgz` on the box. Pull before deploying - a stale checkout copied over the server undoes
 whatever landed from elsewhere. Still open:
 
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
