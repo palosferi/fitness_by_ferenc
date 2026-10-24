@@ -9,11 +9,13 @@ importing `sync` skips), and the server's venv is production-only with no
 
 ## Things the repo doesn't tell you
 
-- **Shell on the box is `ssh palos@fujitsu`** (Tailscale, also
-  `100.102.24.16`). The Linux account is `palos` - *not* `palosferenc`, which
-  is the Tailscale account name. Using the latter returns "tailnet policy does
-  not permit you to SSH as user", which reads like an ACL problem and is not
-  one. The tailnet's `ssh` rule is `accept` rather than `check` so
+- **Shell on the box is `ssh ferencpalos@100.102.24.16`** (Tailscale; the
+  node is `fujitsu-debian-server`, and a bare `fujitsu` only resolves where an
+  ssh alias says so). The Linux account was renamed from `palos` to
+  `ferencpalos` in October 2026, home `/home/ferencpalos` - and it is *not*
+  `palosferenc`, the Tailscale account name. A wrong user returns "tailnet
+  policy does not permit you to SSH as user", which reads like an ACL problem
+  and is not one. The tailnet's `ssh` rule is `accept` rather than `check` so
   non-interactive sessions work.
 
 - **The server copy is not a git clone.** `~/fitness_by_ferenc` on the Fujitsu
@@ -24,14 +26,16 @@ importing `sync` skips), and the server's venv is production-only with no
   Windows laptop have CRLF endings, so a checksum against git reads as
   "changed" when it isn't - compare with `tr -d '\r'` before assuming edits.
 
-- **`palos` has no passwordless sudo**, so `systemctl restart` is out from a
+- **`ferencpalos` has no passwordless sudo**, so `systemctl restart` is out from a
   non-interactive session. It isn't needed: the dashboard unit runs gunicorn
-  as `palos` without `--preload`, so
+  as `ferencpalos` without `--preload`, so
   `kill -HUP $(systemctl show -p MainPID --value fitness-dashboard)` boots a
   fresh worker on the new code (the old one takes up to ~30s to drain). The
-  sync unit is a timer-driven oneshot and picks up new code on its next run;
+  sync unit is a timer-driven oneshot and picks up new code - and `.env`
+  changes, since it re-reads its EnvironmentFile each run - on its next run;
   `venv/bin/python sync.py` from the checkout runs one by hand. Only unit-file
-  or `.env` changes need a real restart, and so a sudo password.
+  changes, or `.env` changes the dashboard reads, need a real restart, and so
+  a sudo password.
 
 - **The dashboard uses no JavaScript, deliberately.** Expansion is `:target`
   CSS; the auto-reload is a `<meta http-equiv="refresh">`. The reason: the iOS
@@ -64,7 +68,7 @@ importing `sync` skips), and the server's venv is production-only with no
     `nginx:alpine` serving `/var/www/ferencpalos`, which proxies nothing - and
     there are no Custom Locations in NPM at all. Hand-written path rules live
     in `/data/nginx/custom/server_proxy.conf`, on the host at
-    `/home/palos/server/data/npm/nginx/custom/server_proxy.conf`. NPM includes
+    `/home/ferencpalos/server/data/npm/nginx/custom/server_proxy.conf`. NPM includes
     that file in *every* proxy host's server block and never rewrites it, so
     each rule carries an `if ($host != ...) { return 404; }` guard to keep it
     off the other domains. **`/adventures` -> `bucketlist:3000` lives in that
@@ -90,10 +94,9 @@ importing `sync` skips), and the server's venv is production-only with no
 
 ## Outstanding
 
-The server's runtime code matches `main` as of the 0-10 effort level that
-replaced the run prescription, deployed 2026-09-30; the pre-deploy
-code and DB are in `~/fitness_by_ferenc_backup_20260930-103128.tgz` on the
-box. Pull before deploying - a stale checkout copied over the server undoes
+The server's runtime code matches `main` as of the lights-out/wake
+recommendation, deployed 2026-10-24; the pre-deploy code and DB are in
+`~/fitness_by_ferenc_backup_20261024-123758.tgz` on the box. Pull before deploying - a stale checkout copied over the server undoes
 whatever landed from elsewhere. Still open:
 
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
