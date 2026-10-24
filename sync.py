@@ -162,7 +162,9 @@ def run():
         sleep_need_minutes or sleep_hours_rec * 60,
         [last_night] + [{"start_local": h.get("sleep_start_local"), "end_local": h.get("sleep_end_local"),
                          "duration_min": h.get("sleep_duration_min")} for h in history[:6]],
-        fixed_wake=config.USER_WAKE_TIME,
+        target_wake=config.TARGET_WAKE_TIME,
+        max_shift_min=config.WAKE_SHIFT_MINUTES,
+        wake_bounds=(config.WAKE_EARLIEST, config.WAKE_LATEST),
         latency_min=config.SLEEP_LATENCY_MINUTES,
     )
     bedtime_rec, wake_rec = sleep_window or (None, None)

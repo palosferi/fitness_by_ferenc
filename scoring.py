@@ -248,13 +248,23 @@ def _median(values):
     return values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
 
 
-def recommend_sleep_window(sleep_need_min, recent_nights, fixed_wake=None, latency_min=0):
+def recommend_sleep_window(sleep_need_min, recent_nights, target_wake=None, max_shift_min=15,
+                           latency_min=0, wake_bounds=None):
     """When to put the lights out tonight and get up tomorrow, as
     ("HH:MM", "HH:MM").
 
-    The wake time is the anchor - it is the one most people can't move - so
-    it's fixed_wake if set, else the median of the recent nights' wake times
-    (a median, so one lie-in doesn't shift every weekday). Bedtime counts
+    The wake time is the anchor - it is the one most people can't move. It
+    starts from the median of the recent nights' wake times (a median, so one
+    lie-in doesn't shift every weekday) and, with a target_wake, moves at
+    most max_shift_min toward it: a body clock shifts by minutes a day, not
+    hours, so asking for the whole jump at once just gets ignored. The step
+    starts from last night instead when last night landed between the median
+    and the target: the median takes four nights to notice progress, which
+    would turn 15 minutes a night into 15 every four. A lie-in, or a 05:00
+    flight past the target, is still outvoted. A max_shift_min of 720 makes
+    the target a fixed wake time. wake_bounds, ("HH:MM", "HH:MM"), then
+    keeps the result inside a window - out-of-window answers go to the
+    nearer edge, so a 23:00 riser is told 06:00, not 10:00. Bedtime counts
     back from it by the sleep need plus the time you typically lie awake:
     Garmin's need is minutes *asleep*, and going to bed exactly need-before-
     wake would come up short every night by however long that is.
@@ -264,18 +274,37 @@ def recommend_sleep_window(sleep_need_min, recent_nights, fixed_wake=None, laten
     went out - so the time it takes to fall asleep comes in as latency_min.
 
     recent_nights are dicts with start_local, end_local (ISO) and
-    duration_min (time asleep). Returns None with nothing to anchor on.
+    duration_min (time asleep), last night first. Returns None with nothing to anchor on.
     """
     if not sleep_need_min:
         return None
     nights = [n for n in recent_nights if n.get("start_local") and n.get("end_local")]
 
-    if fixed_wake:
-        wake = _clock_minutes(fixed_wake)
-    elif nights:
+    if nights:
         wake = _median([_clock_minutes(n["end_local"]) for n in nights])
+        if target_wake:
+            target = _clock_minutes(target_wake)
+
+            def gap(frm):
+                # The short way round the clock, so 23:50 -> 00:10 is +20, not -1420.
+                return (target - frm + 720) % 1440 - 720
+
+            # Last night, if it has times and sits between the median and the target.
+            if nights[0] is recent_nights[0]:
+                last = _clock_minutes(nights[0]["end_local"])
+                if gap(last) * gap(wake) >= 0 and abs(gap(last)) < abs(gap(wake)):
+                    wake = last
+            wake += max(-max_shift_min, min(max_shift_min, gap(wake)))
+    elif target_wake:
+        wake = _clock_minutes(target_wake)
     else:
         return None
+
+    if wake_bounds:
+        wake %= 1440
+        earliest, latest = (_clock_minutes(b) for b in wake_bounds)
+        if not earliest <= wake <= latest:
+            wake = min((earliest, latest), key=lambda edge: min((wake - edge) % 1440, (edge - wake) % 1440))
 
     awake_in_bed = 0
     in_bed = [(_clock_minutes(n["end_local"]) - _clock_minutes(n["start_local"])) % 1440 - n["duration_min"]

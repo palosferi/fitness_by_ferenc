@@ -1,7 +1,7 @@
 # Notes for Claude
 
 Orientation lives in `README.md` (what the scores mean) and `docs/SETUP.md`
-(deployment). Tests are `pytest` from the repo root - 124 of them, all passing as of the
+(deployment). Tests are `pytest` from the repo root - 130 of them, all passing as of the
 last commit. There is no CI, and the two environments each lack something the
 suite wants: a dev checkout usually has no `garminconnect` (so the one test
 importing `sync` skips), and the server's venv is production-only with no

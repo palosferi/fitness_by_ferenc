@@ -212,13 +212,59 @@ def test_sleep_window_bedtime_wraps_past_midnight():
     assert scoring.recommend_sleep_window(600, nights) == ("01:00", "11:00")
 
 
-def test_sleep_window_fixed_wake_overrides_history():
+def test_sleep_window_nudges_toward_the_target_a_step_at_a_time():
+    nights = [night("01:00", "10:20", 560)] * 3
+    assert scoring.recommend_sleep_window(540, nights, target_wake="07:30")[1] == "10:05"
+    assert scoring.recommend_sleep_window(540, nights, target_wake="07:30", max_shift_min=30)[1] == "09:50"
+
+
+def test_sleep_window_steps_on_from_a_morning_that_followed_it():
+    # Median still 10:20, but last night got up at 10:05 as told - the next
+    # step starts from there rather than waiting four nights for the median.
+    nights = [night("00:45", "10:05", 560)] + [night("01:00", "10:20", 560)] * 6
+    assert scoring.recommend_sleep_window(540, nights, target_wake="07:30")[1] == "09:50"
+
+
+def test_sleep_window_ignores_a_lie_in_and_an_overshoot():
+    week = [night("00:00", "08:30", 500)] * 6
+    lie_in = [night("02:00", "11:00", 520)] + week
+    assert scoring.recommend_sleep_window(480, lie_in, target_wake="07:30")[1] == "08:15"
+    early_flight = [night("23:00", "04:30", 320)] + week
+    assert scoring.recommend_sleep_window(480, early_flight, target_wake="07:30")[1] == "08:15"
+
+
+def test_sleep_window_lands_on_a_target_within_one_step():
+    nights = [night("23:30", "07:40", 480)] * 3
+    assert scoring.recommend_sleep_window(480, nights, target_wake="07:30")[1] == "07:30"
+
+
+def test_sleep_window_nudges_later_too_and_the_short_way_round():
+    early = [night("21:00", "05:00", 480)] * 3
+    assert scoring.recommend_sleep_window(480, early, target_wake="07:30")[1] == "05:15"
+    late = [night("15:00", "23:50", 480)] * 3
+    assert scoring.recommend_sleep_window(480, late, target_wake="00:10")[1] == "00:05"
+
+
+def test_sleep_window_keeps_the_wake_time_inside_its_bounds():
+    bounds = ("06:00", "10:00")
+    late = [night("01:00", "10:20", 540)] * 3
+    assert scoring.recommend_sleep_window(540, late, wake_bounds=bounds) == ("00:40", "10:00")
+    early = [night("21:00", "05:00", 480)] * 3
+    assert scoring.recommend_sleep_window(480, early, wake_bounds=bounds)[1] == "06:00"
+    # Out-of-window goes to the nearer edge round the clock, not the numerically lower one.
+    night_shift = [night("15:00", "23:00", 480)] * 3
+    assert scoring.recommend_sleep_window(480, night_shift, wake_bounds=bounds)[1] == "06:00"
+    inside = [night("23:00", "07:00", 480)] * 3
+    assert scoring.recommend_sleep_window(480, inside, wake_bounds=bounds)[1] == "07:00"
+
+
+def test_sleep_window_wide_shift_makes_the_target_fixed():
     nights = [night("23:00", "08:00", 540)] * 3
-    assert scoring.recommend_sleep_window(450, nights, fixed_wake="06:30") == ("23:00", "06:30")
+    assert scoring.recommend_sleep_window(450, nights, target_wake="06:30", max_shift_min=720) == ("23:00", "06:30")
 
 
 def test_sleep_window_needs_something_to_anchor_on():
     assert scoring.recommend_sleep_window(480, []) is None
     assert scoring.recommend_sleep_window(480, [{"start_local": None, "end_local": None, "duration_min": 0}]) is None
     assert scoring.recommend_sleep_window(None, [night("23:00", "07:00", 450)]) is None
-    assert scoring.recommend_sleep_window(480, [], fixed_wake="07:00") == ("23:00", "07:00")
+    assert scoring.recommend_sleep_window(480, [], target_wake="07:00") == ("23:00", "07:00")

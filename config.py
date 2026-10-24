@@ -21,9 +21,16 @@ USER_MAX_HR = int(os.environ.get("USER_MAX_HR", str(220 - USER_AGE)))
 # other constants in scoring.py which just shape the algorithm internally.
 USER_TRIMP_EXPONENT = float(os.environ.get("USER_TRIMP_EXPONENT", "1.92"))
 
-# The time you have to be up by, "HH:MM". Left unset, the recommended wake
-# time is your usual one - the median of the last week of Garmin wake times.
-USER_WAKE_TIME = os.environ.get("USER_WAKE_TIME") or None
+# The wake time to work toward, "HH:MM". The recommended wake time starts
+# from your usual one - the median of the last week of Garmin wake times -
+# and moves at most WAKE_SHIFT_MINUTES a night toward this. Unset, it just
+# follows your usual time. WAKE_SHIFT_MINUTES=720 makes it a fixed alarm.
+TARGET_WAKE_TIME = os.environ.get("TARGET_WAKE_TIME") or None
+WAKE_SHIFT_MINUTES = int(os.environ.get("WAKE_SHIFT_MINUTES", "15"))
+
+# Never recommend getting up outside this window, whatever the history says.
+WAKE_EARLIEST = os.environ.get("WAKE_EARLIEST", "06:00")
+WAKE_LATEST = os.environ.get("WAKE_LATEST", "10:00")
 
 # Minutes from lights out to Garmin's detected sleep start - Garmin can't see
 # it, so the recommended lights-out time adds it back. Includes the lag in
