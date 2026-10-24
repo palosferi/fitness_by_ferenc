@@ -234,3 +234,60 @@ def recommend_sleep_hours(today_strain, recent_sleep_durations_min):
         base += min(1.0, debt * 0.3)
 
     return round(min(10.0, base), 1)
+
+
+def _clock_minutes(value):
+    """Minutes past midnight from "HH:MM" or an ISO datetime."""
+    hh, mm = value.rsplit("T", 1)[-1].split(":")[:2]
+    return int(hh) * 60 + int(mm)
+
+
+def _median(values):
+    values = sorted(values)
+    mid = len(values) // 2
+    return values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+
+
+def recommend_sleep_window(sleep_need_min, recent_nights, fixed_wake=None, latency_min=0):
+    """When to put the lights out tonight and get up tomorrow, as
+    ("HH:MM", "HH:MM").
+
+    The wake time is the anchor - it is the one most people can't move - so
+    it's fixed_wake if set, else the median of the recent nights' wake times
+    (a median, so one lie-in doesn't shift every weekday). Bedtime counts
+    back from it by the sleep need plus the time you typically lie awake:
+    Garmin's need is minutes *asleep*, and going to bed exactly need-before-
+    wake would come up short every night by however long that is.
+
+    Only the awake spells *inside* the night are in Garmin's data - its
+    sleep start is when it decided you'd dropped off, not when the lights
+    went out - so the time it takes to fall asleep comes in as latency_min.
+
+    recent_nights are dicts with start_local, end_local (ISO) and
+    duration_min (time asleep). Returns None with nothing to anchor on.
+    """
+    if not sleep_need_min:
+        return None
+    nights = [n for n in recent_nights if n.get("start_local") and n.get("end_local")]
+
+    if fixed_wake:
+        wake = _clock_minutes(fixed_wake)
+    elif nights:
+        wake = _median([_clock_minutes(n["end_local"]) for n in nights])
+    else:
+        return None
+
+    awake_in_bed = 0
+    in_bed = [(_clock_minutes(n["end_local"]) - _clock_minutes(n["start_local"])) % 1440 - n["duration_min"]
+              for n in nights if n.get("duration_min")]
+    if in_bed:
+        awake_in_bed = max(0, min(90, _median(in_bed)))
+
+    bedtime = (wake - sleep_need_min - awake_in_bed - latency_min) % 1440
+
+    def fmt(minutes):
+        # Round to 5 minutes - nobody sets an alarm for 06:53.
+        minutes = int(5 * round(minutes / 5)) % 1440
+        return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+    return fmt(bedtime), fmt(wake)

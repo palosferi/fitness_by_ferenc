@@ -131,7 +131,8 @@ Tailscale (section 5) still works as a private fallback if the proxy is down.
    `/#stress-detail` - and the page loads with that panel already expanded.
 
 The tile shows three rings - Sleep, Recovery, Strain - plus today's
-effort level and a steps/sleep-target footer.
+effort level and a steps footer with tonight's recommended lights-out and
+wake times.
 
 Notes on how it authenticates:
 - The widget sends HTTP basic auth on the API call, so it gets **your** data.

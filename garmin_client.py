@@ -368,4 +368,15 @@ def extract_sleep_fields(sleep):
         "rem_min": rem_sec / 60,
         "awake_count": awake_count,
         "garmin_score": score,
+        "start_local": _local_wall_clock(dto.get("sleepStartTimestampLocal")),
+        "end_local": _local_wall_clock(dto.get("sleepEndTimestampLocal")),
     }
+
+
+def _local_wall_clock(ms):
+    """Garmin's *Local timestamps are epoch milliseconds already shifted to
+    the watch's timezone, so reading them as UTC gives the wall-clock time
+    the night actually started or ended - wherever it was spent."""
+    if not ms:
+        return None
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).replace(tzinfo=None).isoformat(timespec="minutes")

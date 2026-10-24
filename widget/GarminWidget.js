@@ -194,7 +194,9 @@ async function createWidget(creds) {
     const footerBits = [];
     if (data.steps) footerBits.push(`${Math.round(data.steps / 1000)}k steps`);
     const needMin = data.sleep_need_minutes || (data.sleep_recommendation_hours || 0) * 60;
-    if (needMin) {
+    if (data.recommended_bedtime && data.recommended_wake) {
+      footerBits.push(`lights out ${data.recommended_bedtime} → up ${data.recommended_wake}`);
+    } else if (needMin) {
       const h = Math.floor(Math.round(needMin) / 60);
       const m = Math.round(needMin) % 60;
       footerBits.push(`sleep target ${m ? `${h}h${String(m).padStart(2, "0")}m` : `${h}h`}`);

@@ -63,3 +63,17 @@ def test_old_rows_fall_back_to_their_text(client, monkeypatch):
 def test_log_card_is_last_on_the_page(client, monkeypatch):
     page = render(client, monkeypatch, {"steps": 1000, "recommended_effort": 5})
     assert page.index("Effort today") < page.index('class="stats"') < page.index("Without the watch")
+
+
+def test_sleep_stat_shows_bed_and_wake_times(client, monkeypatch):
+    page = render(client, monkeypatch, {"sleep_need_minutes": 480,
+                                        "recommended_bedtime": "22:45", "recommended_wake": "07:00"})
+    assert "Lights out → up" in page
+    assert "22:45 → 07:00" in page
+    assert "8h" not in page
+
+
+def test_sleep_stat_falls_back_to_the_duration(client, monkeypatch):
+    page = render(client, monkeypatch, {"sleep_need_minutes": 480})
+    assert "Sleep target tonight" in page
+    assert "8h" in page

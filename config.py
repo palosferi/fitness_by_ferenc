@@ -21,6 +21,15 @@ USER_MAX_HR = int(os.environ.get("USER_MAX_HR", str(220 - USER_AGE)))
 # other constants in scoring.py which just shape the algorithm internally.
 USER_TRIMP_EXPONENT = float(os.environ.get("USER_TRIMP_EXPONENT", "1.92"))
 
+# The time you have to be up by, "HH:MM". Left unset, the recommended wake
+# time is your usual one - the median of the last week of Garmin wake times.
+USER_WAKE_TIME = os.environ.get("USER_WAKE_TIME") or None
+
+# Minutes from lights out to Garmin's detected sleep start - Garmin can't see
+# it, so the recommended lights-out time adds it back. Includes the lag in
+# Garmin's own sleep-onset detection, which is why it errs a little long.
+SLEEP_LATENCY_MINUTES = int(os.environ.get("SLEEP_LATENCY_MINUTES", "20"))
+
 DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", "8420"))
 
 # How many stored nights a baseline we derive ourselves needs before it is

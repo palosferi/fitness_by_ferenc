@@ -10,13 +10,14 @@ it looks alive without flickering on every refresh.
 """
 
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from scoring import (
     compute_readiness,
     compute_trimp,
     fallback_sleep_score,
     recommend_sleep_hours,
+    recommend_sleep_window,
     recommend_training,
     trimp_to_strain,
 )
@@ -34,6 +35,21 @@ def _synthetic_hr_series(rng, resting_hr, minutes_of_exercise):
     for _ in range(int(minutes_of_exercise / 5)):
         series.append((rng.randint(135, 168), 5.0))
     return series
+
+
+def _synthetic_nights(rng, day, last_duration_min):
+    """A week of nights ending around 07:00, last night first - the shape
+    sync.py hands recommend_sleep_window()."""
+    nights = []
+    for back in range(7):
+        duration = last_duration_min if back == 0 else rng.randint(380, 510)
+        wake = datetime.combine(day.date() - timedelta(days=back), datetime.min.time()) \
+            + timedelta(minutes=rng.randint(6 * 60 + 30, 7 * 60 + 30))
+        start = wake - timedelta(minutes=duration + rng.randint(10, 35))
+        nights.append({"start_local": start.isoformat(timespec="minutes"),
+                       "end_local": wake.isoformat(timespec="minutes"),
+                       "duration_min": duration})
+    return nights
 
 
 def generate_day(day=None):
@@ -62,6 +78,8 @@ def generate_day(day=None):
     yesterday_strain = rng.choice([None, 30.0, 55.0, 80.0])
     rec = recommend_training(readiness, yesterday_strain)
     sleep_hours_rec = recommend_sleep_hours(strain_score, [sleep_duration_min] * 3)
+    nights = _synthetic_nights(rng, day, sleep_duration_min)
+    bedtime_rec, wake_rec = recommend_sleep_window(sleep_hours_rec * 60, nights, latency_min=20)
 
     drained = rng.randint(30, 70)
     charged = rng.randint(45, 85)
@@ -95,6 +113,10 @@ def generate_day(day=None):
         "hrv_balanced_low": 42,
         "hrv_balanced_high": 68,
         "sleep_need_minutes": sleep_hours_rec * 60,
+        "sleep_start_local": nights[0]["start_local"],
+        "sleep_end_local": nights[0]["end_local"],
+        "recommended_bedtime": bedtime_rec,
+        "recommended_wake": wake_rec,
         "watch_synced_at": day.isoformat(timespec="seconds"),
         "spo2_avg": rng.randint(93, 98),
         "spo2_baseline": 95,

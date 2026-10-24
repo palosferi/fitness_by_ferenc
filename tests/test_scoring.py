@@ -180,3 +180,45 @@ def test_recommend_sleep_hours_adds_debt_makeup():
 
 def test_recommend_sleep_hours_caps_at_ten():
     assert scoring.recommend_sleep_hours(today_strain=100, recent_sleep_durations_min=[120, 120, 120]) <= 10.0
+
+
+# ---- recommend_sleep_window ------------------------------------------------
+
+def night(start, end, asleep):
+    return {"start_local": f"2026-10-01T{start}", "end_local": f"2026-10-02T{end}", "duration_min": asleep}
+
+
+def test_sleep_window_wakes_at_the_usual_time_not_the_lie_in():
+    nights = [night("23:00", "07:00", 450), night("23:10", "07:10", 450),
+              night("22:50", "06:50", 450), night("00:30", "10:30", 570),
+              night("01:00", "11:00", 570)]
+    bedtime, wake = scoring.recommend_sleep_window(480, nights)
+    assert wake == "07:10"  # two weekend lie-ins out of five don't move it
+
+
+def test_sleep_window_bedtime_leaves_room_for_lying_awake():
+    # 8h in bed, 7h30 asleep each night: 30 min awake on top of the need.
+    nights = [night("23:00", "07:00", 450)] * 3
+    assert scoring.recommend_sleep_window(480, nights) == ("22:30", "07:00")
+
+
+def test_sleep_window_lights_out_allows_for_falling_asleep():
+    nights = [night("23:00", "07:00", 450)] * 3
+    assert scoring.recommend_sleep_window(480, nights, latency_min=25) == ("22:05", "07:00")
+
+
+def test_sleep_window_bedtime_wraps_past_midnight():
+    nights = [night("03:00", "11:00", 480)] * 3
+    assert scoring.recommend_sleep_window(600, nights) == ("01:00", "11:00")
+
+
+def test_sleep_window_fixed_wake_overrides_history():
+    nights = [night("23:00", "08:00", 540)] * 3
+    assert scoring.recommend_sleep_window(450, nights, fixed_wake="06:30") == ("23:00", "06:30")
+
+
+def test_sleep_window_needs_something_to_anchor_on():
+    assert scoring.recommend_sleep_window(480, []) is None
+    assert scoring.recommend_sleep_window(480, [{"start_local": None, "end_local": None, "duration_min": 0}]) is None
+    assert scoring.recommend_sleep_window(None, [night("23:00", "07:00", 450)]) is None
+    assert scoring.recommend_sleep_window(480, [], fixed_wake="07:00") == ("23:00", "07:00")

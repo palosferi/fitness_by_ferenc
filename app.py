@@ -693,9 +693,17 @@ def dashboard():
                 parts.append(f"{name} {round(today[key])}")
         stress["caption"] = " · ".join(parts) if parts else None
 
+    # Rows synced before the window existed, or with no night on record yet
+    # to take a wake time from, fall back to the bare duration.
+    if today.get("recommended_bedtime") and today.get("recommended_wake"):
+        sleep_stat = {"label": "Lights out → up",
+                      "value": f"{today['recommended_bedtime']} → {today['recommended_wake']}"}
+    else:
+        sleep_stat = {"label": "Sleep target tonight", "value": format_duration(sleep_need)}
+
     stats = [
         {"label": "Steps", "value": f"{steps:,}" if steps else None},
-        {"label": "Sleep target tonight", "value": format_duration(sleep_need)},
+        sleep_stat,
     ]
 
     logged_sessions, reminders = [], []

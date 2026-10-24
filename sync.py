@@ -40,6 +40,7 @@ from scoring import (
     fallback_sleep_score,
     logged_sessions_trimp,
     recommend_sleep_hours,
+    recommend_sleep_window,
     recommend_training,
 )
 
@@ -155,6 +156,17 @@ def run():
         recent_sleep_durations = [h["sleep_duration_min"] for h in history[:3] if h.get("sleep_duration_min")]
         sleep_hours_rec = recommend_sleep_hours(strain_score, recent_sleep_durations)
 
+    last_night = {"start_local": sleep_fields["start_local"], "end_local": sleep_fields["end_local"],
+                  "duration_min": sleep_fields["duration_min"]}
+    sleep_window = recommend_sleep_window(
+        sleep_need_minutes or sleep_hours_rec * 60,
+        [last_night] + [{"start_local": h.get("sleep_start_local"), "end_local": h.get("sleep_end_local"),
+                         "duration_min": h.get("sleep_duration_min")} for h in history[:6]],
+        fixed_wake=config.USER_WAKE_TIME,
+        latency_min=config.SLEEP_LATENCY_MINUTES,
+    )
+    bedtime_rec, wake_rec = sleep_window or (None, None)
+
     body_battery = extract_body_battery(snapshot["body_battery"])
     stress = extract_stress(snapshot["stress"])
     stress_avg = stress["avg"]
@@ -170,6 +182,8 @@ def run():
         "hrv_baseline": hrv_baseline,
         "sleep_score": sleep_score,
         "sleep_duration_min": sleep_fields["duration_min"],
+        "sleep_start_local": sleep_fields["start_local"],
+        "sleep_end_local": sleep_fields["end_local"],
         "steps": steps,
         "trimp": trimp,
         "hr_trimp": hr_trimp,
@@ -196,6 +210,8 @@ def run():
         "hrv_balanced_low": hrv_range["low"],
         "hrv_balanced_high": hrv_range["high"],
         "sleep_need_minutes": sleep_need_minutes,
+        "recommended_bedtime": bedtime_rec,
+        "recommended_wake": wake_rec,
         "watch_synced_at": watch_synced_at,
         "spo2_avg": spo2["avg"],
         "spo2_baseline": spo2["baseline"],
@@ -215,10 +231,10 @@ def run():
 
     log.info(
         "Synced %s: strain=%s (target %s) sleep=%s readiness=%s (%s) battery=%s stress=%s acwr=%s%% (%s) "
-        "vo2max=%s steps=%s effort=%s sleep_target=%sh%s",
+        "vo2max=%s steps=%s effort=%s sleep_target=%sh (%s-%s)%s",
         today_str, strain_score, rec["target_strain"], sleep_score, readiness, readiness_source,
         body_battery["current"], stress_avg, acwr["percent"], acwr["feedback"], vo2max["value"],
-        steps, rec["effort"], sleep_hours_rec,
+        steps, rec["effort"], sleep_hours_rec, bedtime_rec, wake_rec,
         f" [partial sync, failed: {', '.join(fetch_errors)}]" if fetch_errors else "",
     )
 
