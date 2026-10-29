@@ -126,19 +126,17 @@ def run():
         storage.get_manual_activities(conn, [today_str]), config.USER_TRIMP_EXPONENT)
     trimp, strain_score = day_strain(hr_trimp, logged_trimp, trailing_trimps)
 
-    hrv_baseline = hrv_weekly
-    if not hrv_baseline:
-        hrv_baseline = _derived_baseline(history[:7], "hrv_last_night")
+    # The nights before last night, as recovery was fitted against. Garmin's
+    # weeklyAvg is the fallback for a new database, but it takes in last
+    # night too, which damps the very change recovery is reading.
+    hrv_baseline = _derived_baseline(history[:7], "hrv_last_night") or hrv_weekly
 
     resting_hr_baseline = _derived_baseline(history[:7], "resting_hr")
 
+    # Kept for comparison only - see the readiness note in scoring.py.
     garmin_readiness = extract_garmin_readiness_score(snapshot["readiness"])
-    if garmin_readiness is not None:
-        readiness = garmin_readiness
-        readiness_source = "garmin"
-    else:
-        readiness = compute_readiness(sleep_score, hrv_last_night, hrv_baseline, resting_hr, resting_hr_baseline)
-        readiness_source = "fallback"
+    readiness = compute_readiness(sleep_score, hrv_last_night, hrv_baseline, resting_hr, resting_hr_baseline)
+    readiness_source = "recovery"
 
     yesterday = history[0] if history else None
     yesterday_strain = yesterday["strain_score"] if yesterday else None
@@ -153,8 +151,7 @@ def run():
     if sleep_need_minutes:
         sleep_hours_rec = round(sleep_need_minutes / 60, 1)
     else:
-        recent_sleep_durations = [h["sleep_duration_min"] for h in history[:3] if h.get("sleep_duration_min")]
-        sleep_hours_rec = recommend_sleep_hours(strain_score, recent_sleep_durations)
+        sleep_hours_rec = recommend_sleep_hours(strain_score, sleep_fields["duration_min"])
 
     last_night = {"start_local": sleep_fields["start_local"], "end_local": sleep_fields["end_local"],
                   "duration_min": sleep_fields["duration_min"]}
@@ -193,6 +190,7 @@ def run():
         "strain_score": strain_score,
         "readiness_score": readiness,
         "readiness_source": readiness_source,
+        "garmin_readiness": garmin_readiness,
         "target_strain": rec["target_strain"],
         "sleep_recommendation_hours": sleep_hours_rec,
         "body_battery": body_battery["current"],

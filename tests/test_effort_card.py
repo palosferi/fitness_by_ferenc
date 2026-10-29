@@ -47,7 +47,7 @@ def test_card_shows_the_level_and_advice_without_repeating_it(client, monkeypatc
 
 
 def test_rest_day_fills_no_segments(client, monkeypatch):
-    rec = scoring.recommend_training(readiness=20, yesterday_strain=None)
+    rec = scoring.recommend_training(readiness=0, yesterday_strain=None)
     page = render(client, monkeypatch, {"recommended_effort": 0, "recommendation_detail": rec["detail"]})
     assert '<span class="effort-label">rest</span>' in page
     assert '<span class="on">' not in page

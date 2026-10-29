@@ -98,32 +98,50 @@ def test_fallback_sleep_score_floors_at_zero():
 
 # ---- compute_readiness ----------------------------------------------------
 
+def test_compute_readiness_sits_mid_scale_on_baseline():
+    # A typical night on baseline lands near WHOOP's middle, not at an extreme.
+    assert scoring.compute_readiness(80, hrv_last_night=50, hrv_baseline=50,
+                                     resting_hr=55, resting_hr_baseline=55) == 55.0
+
+
 def test_compute_readiness_neutral_without_baselines():
-    # no HRV/RHR baselines -> falls back to neutral components
-    readiness = scoring.compute_readiness(sleep_score=80, hrv_last_night=None, hrv_baseline=None,
-                                           resting_hr=None, resting_hr_baseline=None)
-    assert 0 <= readiness <= 100
+    # A new user: nothing to compare against, so a typical night reads as one.
+    assert scoring.compute_readiness(None, None, None, None, None) == 55.0
 
 
 def test_compute_readiness_rewards_hrv_above_baseline():
     low = scoring.compute_readiness(80, hrv_last_night=40, hrv_baseline=50, resting_hr=None, resting_hr_baseline=None)
     high = scoring.compute_readiness(80, hrv_last_night=60, hrv_baseline=50, resting_hr=None, resting_hr_baseline=None)
-    assert high > low
+    assert high > 55 > low
 
 
 def test_compute_readiness_penalizes_elevated_resting_hr():
-    normal = scoring.compute_readiness(80, None, None, resting_hr=50, resting_hr_baseline=50)
-    elevated = scoring.compute_readiness(80, None, None, resting_hr=58, resting_hr_baseline=50)
-    assert elevated < normal
+    normal = scoring.compute_readiness(80, 50, 50, resting_hr=50, resting_hr_baseline=50)
+    elevated = scoring.compute_readiness(80, 50, 50, resting_hr=58, resting_hr_baseline=50)
+    assert normal - elevated == 16.0
+
+
+def test_compute_readiness_leans_on_resting_hr_without_hrv():
+    # The cold start before an HRV baseline exists: resting HR still moves
+    # the score, at double weight, instead of every day reading the same.
+    with_hrv = scoring.compute_readiness(80, 50, 50, resting_hr=58, resting_hr_baseline=50)
+    without_hrv = scoring.compute_readiness(80, None, None, resting_hr=58, resting_hr_baseline=50)
+    assert 55 - without_hrv == 2 * (55 - with_hrv)
+
+
+def test_compute_readiness_stays_in_range():
+    assert scoring.compute_readiness(0, 10, 60, 80, 50) == 1.0
+    assert scoring.compute_readiness(100, 120, 40, 40, 60) == 100.0
 
 
 # ---- recommend_training ----------------------------------------------------
 
 @pytest.mark.parametrize("readiness,expected_effort", [
-    (20, 0),
-    (30, 0),
-    (58, 4),
-    (79, 8),
+    (0, 0),
+    (20, 2),    # red: easy movement
+    (33, 3),    # top of red: light at most
+    (58, 6),    # yellow: moderate
+    (79, 8),    # green: hard
     (100, 10),
 ])
 def test_recommend_training_effort_levels(readiness, expected_effort):
@@ -139,7 +157,7 @@ def test_recommend_training_effort_never_decreases_with_readiness():
 
 
 def test_recommend_training_detail_names_the_level():
-    rec = scoring.recommend_training(readiness=58, yesterday_strain=None)
+    rec = scoring.recommend_training(readiness=40, yesterday_strain=None)
     assert rec["detail"].startswith("Effort 4/10, light.")
     assert "run" not in rec["detail"].lower()
 
@@ -165,21 +183,23 @@ def test_recommend_training_target_strain_is_clamped():
 # ---- recommend_sleep_hours -------------------------------------------------
 
 def test_recommend_sleep_hours_scales_with_strain():
-    rest_day = scoring.recommend_sleep_hours(today_strain=0, recent_sleep_durations_min=[480, 480, 480])
-    hard_day = scoring.recommend_sleep_hours(today_strain=100, recent_sleep_durations_min=[480, 480, 480])
-    assert hard_day > rest_day
-    assert 7.0 <= rest_day <= 9.5
-    assert hard_day <= 10.0
+    rest_day = scoring.recommend_sleep_hours(today_strain=0, last_night_sleep_min=480)
+    hard_day = scoring.recommend_sleep_hours(today_strain=100, last_night_sleep_min=480)
+    assert rest_day == 8.0
+    assert hard_day == 9.5
 
 
-def test_recommend_sleep_hours_adds_debt_makeup():
-    well_rested = scoring.recommend_sleep_hours(today_strain=50, recent_sleep_durations_min=[480, 480, 480])
-    sleep_deprived = scoring.recommend_sleep_hours(today_strain=50, recent_sleep_durations_min=[300, 300, 300])
-    assert sleep_deprived > well_rested
+def test_recommend_sleep_hours_adds_half_of_last_nights_shortfall():
+    well_rested = scoring.recommend_sleep_hours(today_strain=0, last_night_sleep_min=480)
+    short_night = scoring.recommend_sleep_hours(today_strain=0, last_night_sleep_min=360)
+    assert short_night - well_rested == 1.0
+    # A long night doesn't bank credit, and a missing one adds nothing.
+    assert scoring.recommend_sleep_hours(today_strain=0, last_night_sleep_min=600) == 8.0
+    assert scoring.recommend_sleep_hours(today_strain=0, last_night_sleep_min=0) == 8.0
 
 
 def test_recommend_sleep_hours_caps_at_ten():
-    assert scoring.recommend_sleep_hours(today_strain=100, recent_sleep_durations_min=[120, 120, 120]) <= 10.0
+    assert scoring.recommend_sleep_hours(today_strain=100, last_night_sleep_min=120) == 10.0
 
 
 # ---- recommend_sleep_window ------------------------------------------------

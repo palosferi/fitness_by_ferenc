@@ -1,7 +1,7 @@
 # Notes for Claude
 
 Orientation lives in `README.md` (what the scores mean) and `docs/SETUP.md`
-(deployment). Tests are `pytest` from the repo root - 130 of them, all passing as of the
+(deployment). Tests are `pytest` from the repo root - 134 of them, all passing as of the
 last commit. There is no CI, and the two environments each lack something the
 suite wants: a dev checkout usually has no `garminconnect` (so the one test
 importing `sync` skips), and the server's venv is production-only with no
@@ -113,12 +113,15 @@ Instinct 2 watch, Samsung phone. Nothing here is started.
 **Instinct 2 capability was checked against Garmin's docs, not assumed:** it
 has both HRV Status and Training Readiness (the latter arrived in firmware
 13.10), so update the watch first. But HRV Status needs ~3 weeks of consistent
-overnight wear before a baseline exists, and that cold start is the real
-problem: with no HRV, `compute_readiness()` (scoring.py) substitutes a flat
-`hrv_component = 60`, readiness parks at 60-70, and `recommend_training()`
-emits effort 5 every single day for three weeks. Body Battery is
-available from day one and on the same 0-100 scale - the day's peak is roughly
-the wake value - so it's the natural stand-in.
+overnight wear before a *status* exists. That matters less than it did:
+readiness no longer uses Garmin's Training Readiness or HRV Status, only the
+nightly HRV average (which Garmin reports from the first night - Ferenc's
+Epix did, with status NONE) against our own 5-night baseline. Until those 5
+nights exist, `compute_readiness()` runs on resting HR at double weight,
+which still tracked WHOOP's recovery at Spearman 0.78 - so the first week
+reads near 55 and moves with resting HR and sleep, rather than parking.
+Body Battery remains a possible extra signal but is no longer needed as a
+stand-in.
 
 Other adjustments that setup needs:
 

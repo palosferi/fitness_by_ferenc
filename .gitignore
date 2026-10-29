@@ -12,3 +12,7 @@ backups/
 # VPN topology, LAN addresses) and this repo is public.
 /ADVENTURES_MIGRATION_HANDOFF.md
 /docs/MIGRATION.md
+
+# Personal health data pulled in for offline analysis: the WHOOP export,
+# Garmin history snapshots, and the comparison output built from them.
+/data/

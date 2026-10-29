@@ -77,7 +77,7 @@ def generate_day(day=None):
 
     yesterday_strain = rng.choice([None, 30.0, 55.0, 80.0])
     rec = recommend_training(readiness, yesterday_strain)
-    sleep_hours_rec = recommend_sleep_hours(strain_score, [sleep_duration_min] * 3)
+    sleep_hours_rec = recommend_sleep_hours(strain_score, sleep_duration_min)
     nights = _synthetic_nights(rng, day, sleep_duration_min)
     bedtime_rec, wake_rec = recommend_sleep_window(sleep_hours_rec * 60, nights, latency_min=20)
 

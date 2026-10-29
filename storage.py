@@ -80,6 +80,7 @@ MIGRATIONS = [
     ("sleep_end_local", "TEXT"),
     ("recommended_bedtime", "TEXT"),
     ("recommended_wake", "TEXT"),
+    ("garmin_readiness", "REAL"),
 ]
 
 # Sessions the watch never saw, logged by hand with a perceived effort.

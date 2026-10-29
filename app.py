@@ -634,8 +634,8 @@ def dashboard():
             resting_hr_baseline = _mean_of(history, "resting_hr")
 
     # Three rings, Whoop's three: Recovery, Sleep, Strain. Target was dropped
-    # because recommend_training() sets it equal to readiness on most days, so
-    # it showed the same number twice; Body Battery was dropped because it's a
+    # because recommend_training() derives it straight from readiness on most
+    # days, so it restated the Recovery ring; Body Battery was dropped because it's a
     # live gauge that a periodically-refreshed ring can't convey anyway.
     readiness = today.get("readiness_score")
     sleep_score = today.get("sleep_score")

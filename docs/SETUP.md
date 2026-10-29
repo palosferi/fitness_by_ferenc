@@ -242,10 +242,12 @@ stored, and never known to you.
   change could break it. If sync stops working, check
   `pip install -U garminconnect` first.
 - The strain/readiness formulas in `scoring.py` are plain, documented
-  rules (Edwards TRIMP for strain, a weighted sleep/HRV/RHR blend for
-  readiness) - not something Garmin or Whoop compute for you. Expect to
-  tune the thresholds in `recommend_training()` after a couple of weeks of
-  watching how the numbers track how you actually feel.
+  rules (Edwards TRIMP for strain, a weighted HRV/RHR/sleep blend for
+  readiness) - not something Garmin or Whoop compute for you. Their
+  constants were checked against one person's WHOOP export with
+  `analysis/compare.py`; with an export of your own, rerun it and refit.
+  Otherwise expect to tune the thresholds in `recommend_training()` after a
+  couple of weeks of watching how the numbers track how you actually feel.
 - `fitness-sync.timer` runs every 30 minutes; that's frequent enough for
   strain to visibly climb through the day without hammering Garmin's servers.
 - The session cookie is named after `URL_PREFIX` rather than Flask's default

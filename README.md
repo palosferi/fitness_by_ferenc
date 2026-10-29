@@ -12,8 +12,9 @@ by plain, documented formulas.
     against your own trailing training load.
   - **Sleep score** (1-100) - Garmin's own score when available, else a
     duration/stages fallback.
-  - **Readiness** (1-100, internal) - blends sleep, HRV vs. your 7-day
-    baseline, and resting HR vs. baseline.
+  - **Recovery** (1-100) - HRV and resting HR against your previous week,
+    plus sleep, with weights fitted to WHOOP's recovery score (see
+    `analysis/`).
   - A **daily effort level** (0 = rest, 10 = all out) derived from
     readiness and yesterday's strain - how hard to go, whatever the sport.
 - Serves a small dashboard (4 rings + recommendation) and a JSON API.
@@ -33,6 +34,7 @@ by plain, documented formulas.
 | `systemd/` | Unit files to run `sync.py`/`backup.py` on a timer and `app.py` as a service |
 | `widget/GarminWidget.js` | iOS Scriptable home-screen widget |
 | `tests/test_scoring.py` | Unit tests for the scoring math (`pytest`, see `requirements-dev.txt`) |
+| `analysis/` | Offline WHOOP-vs-Garmin comparison used to sanity-check the formulas (`requirements-analysis.txt`; reads and writes the gitignored `data/`) |
 | `docs/SETUP.md` | Full deployment walkthrough for the Linux Mint server + Tailscale + iOS |
 
 See `docs/SETUP.md` for the actual deploy steps.

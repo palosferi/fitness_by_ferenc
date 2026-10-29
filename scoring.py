@@ -16,10 +16,11 @@ Sleep: pass through Garmin's own 0-100 sleep score when available (it
 already factors duration/stages/restlessness); fall back to a simple
 duration+stages formula only when Garmin hasn't computed one yet.
 
-Readiness: prefer Garmin's own Training Readiness score (it already blends
-HRV, sleep, recovery time, acute training load and stress history - far
-more inputs than we can easily replicate). We only fall back to a simple
-homegrown sleep/HRV/resting-HR blend on days Garmin's isn't available.
+Readiness: a WHOOP-style recovery from last night's HRV, resting HR and
+sleep against your own baselines, with weights fitted to a WHOOP export.
+Garmin's Training Readiness is still fetched and stored, but not used: it
+blends in training load and recovery time, and against WHOOP's recovery it
+ranked days far worse than HRV alone and ran ~35 points higher.
 """
 
 import math
@@ -138,29 +139,41 @@ def fallback_sleep_score(duration_min, deep_min, rem_min, awake_count):
     return round(max(0, min(100, score)), 1)
 
 
+# Recovery weights, a least-squares fit to 57 days of WHOOP recovery
+# (analysis/compare.py) and rounded. HRV is the log of last night over its
+# baseline, so +10% and -10% move it about equally; resting HR is bpm below
+# baseline. Without HRV, resting HR carries twice the weight - refitted that
+# way it still tracks WHOOP closely, where a neutral HRV stand-in flattened
+# every day to the same score.
+RECOVERY_BASE = 15
+RECOVERY_PER_LN_HRV = 37
+RECOVERY_PER_RHR_BPM = 2
+RECOVERY_PER_RHR_BPM_NO_HRV = 4
+RECOVERY_PER_SLEEP_POINT = 0.5
+TYPICAL_SLEEP_SCORE = 80
+
+
 def compute_readiness(sleep_score, hrv_last_night, hrv_baseline, resting_hr, resting_hr_baseline):
-    """Fallback only - used when Garmin's own Training Readiness score isn't
-    available for the day. Garmin's version (fetched in sync.py via
-    get_training_readiness) is preferred whenever present, since it factors
-    in acute training load, recovery time and sleep/stress history that this
-    simple blend doesn't have access to.
+    """Recovery, 1-100, on WHOOP's scale - what the Recovery ring shows.
+
+    Built from last night against your own recent nights: HRV first, then
+    resting HR, then sleep. Fitted to WHOOP's recovery and checked on Garmin's
+    inputs for the same 30 days: it ranks days as WHOOP does (Spearman 0.84)
+    within ~8 points on average, where Garmin's Training Readiness managed
+    0.53 and sat ~35 points above WHOOP. A missing baseline counts as being
+    on it, and a missing sleep score as a typical night, so a new user starts
+    near the middle rather than at an extreme.
     """
-    sleep_component = sleep_score if sleep_score is not None else 60
+    sleep = sleep_score if sleep_score is not None else TYPICAL_SLEEP_SCORE
+    rhr_below = (resting_hr_baseline - resting_hr) if resting_hr_baseline and resting_hr else 0.0
 
+    score = RECOVERY_BASE + RECOVERY_PER_SLEEP_POINT * sleep
     if hrv_baseline and hrv_baseline > 0 and hrv_last_night:
-        ratio = hrv_last_night / hrv_baseline
-        hrv_component = max(0, min(100, 50 + (ratio - 1.0) * 250))
+        score += RECOVERY_PER_LN_HRV * math.log(hrv_last_night / hrv_baseline)
+        score += RECOVERY_PER_RHR_BPM * rhr_below
     else:
-        hrv_component = 60
-
-    if resting_hr_baseline and resting_hr:
-        delta = resting_hr - resting_hr_baseline
-        rhr_component = max(0, min(100, 70 - delta * 8))
-    else:
-        rhr_component = 70
-
-    readiness = 0.5 * sleep_component + 0.35 * hrv_component + 0.15 * rhr_component
-    return round(readiness, 1)
+        score += RECOVERY_PER_RHR_BPM_NO_HRV * rhr_below
+    return round(max(1.0, min(100.0, score)), 1)
 
 
 # Each effort level's name and what it asks of you. The scale is the same
@@ -196,10 +209,13 @@ def effort_prefix(effort):
 def recommend_training(readiness, yesterday_strain):
     """How hard to go today, 0 (no exercise) to 10 (all out).
 
-    Target strain starts at readiness and drops 15 after a very hard day, so
-    one big session isn't immediately followed by another.
+    Target strain spreads recovery across REST_TARGET..MAX_TARGET, so the
+    effort level is about a tenth of recovery: a red day (under 34) asks for
+    light work at most, a yellow one moderate, a green one hard - roughly
+    where WHOOP's own strain targets sit for each colour. It drops 15 after a
+    very hard day, so one big session isn't immediately followed by another.
     """
-    target_strain = readiness
+    target_strain = REST_TARGET + (MAX_TARGET - REST_TARGET) * readiness / 100
     eased = yesterday_strain is not None and yesterday_strain > 75
     if eased:
         target_strain -= 15
@@ -220,18 +236,23 @@ def recommend_training(readiness, yesterday_strain):
     }
 
 
-def recommend_sleep_hours(today_strain, recent_sleep_durations_min):
+def recommend_sleep_hours(today_strain, last_night_sleep_min):
     """How much sleep to aim for tonight - scales with how much strain you've
-    put on your body today, plus a small nudge if you've been running a
-    sleep deficit the last few days. Meant to be recomputed through the day
-    as strain climbs, not just once at bedtime.
-    """
-    base = 7.0 + (max(0, min(100, today_strain or 0)) / 100) * 2.5  # 7.0h - 9.5h
+    put on your body today, plus half of whatever last night fell short of
+    8h. Meant to be recomputed through the day as strain climbs, not just
+    once at bedtime. Only used when Garmin hasn't supplied its own need.
 
-    if recent_sleep_durations_min:
-        avg_hours = (sum(recent_sleep_durations_min) / len(recent_sleep_durations_min)) / 60
-        debt = max(0, 8.0 - avg_hours)
-        base += min(1.0, debt * 0.3)
+    The constants are a least-squares fit to 61 nights of WHOOP sleep need
+    (analysis/compare.py): WHOOP's need is a base, plus about 0.9 min per
+    point of the day's strain on our 0-100 scale, plus a debt that is mostly
+    last night's shortfall - a three-night average tracked it far worse.
+    Rounded as here, it lands within ~20 min of WHOOP's on average.
+    """
+    base = 8.0 + (max(0, min(100, today_strain or 0)) / 100) * 1.5  # 8.0h - 9.5h
+
+    if last_night_sleep_min:
+        shortfall = max(0, 8.0 - last_night_sleep_min / 60)
+        base += min(1.5, shortfall * 0.5)
 
     return round(min(10.0, base), 1)
 
