@@ -94,10 +94,11 @@ importing `sync` skips), and the server's venv is production-only with no
 
 ## Outstanding
 
-The server's runtime code matches `main` as of the wake-time nudge toward
-`TARGET_WAKE_TIME` (set to 07:30 in the server's `.env`), deployed
-2026-10-24; the pre-deploy code and DB are in
-`~/fitness_by_ferenc_backup_20261024-125742.tgz` on the box. Pull before deploying - a stale checkout copied over the server undoes
+The server's runtime code matches `main` as of the WHOOP calibration
+(recovery replacing Garmin's Training Readiness, effort ~ recovery/10, the
+retuned sleep-need fallback), deployed 2026-10-29; the pre-deploy code and
+DB are in `~/fitness_by_ferenc_backup_20261029-171740.tgz` on the box.
+`TARGET_WAKE_TIME` is 07:30 in the server's `.env`. Pull before deploying - a stale checkout copied over the server undoes
 whatever landed from elsewhere. Still open:
 
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
