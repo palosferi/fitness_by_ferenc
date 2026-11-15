@@ -98,7 +98,10 @@ The server's runtime code matches `main` as of the WHOOP calibration
 (recovery replacing Garmin's Training Readiness, effort ~ recovery/10, the
 retuned sleep-need fallback), deployed 2026-10-29; the pre-deploy code and
 DB are in `~/fitness_by_ferenc_backup_20261029-171740.tgz` on the box.
-`TARGET_WAKE_TIME` is 07:30 in the server's `.env`. Pull before deploying - a stale checkout copied over the server undoes
+`TARGET_WAKE_TIME` is 07:30 in the server's `.env`. The sync timer went
+from 30 to 10 minutes on 2026-11-15 (installed unit and `config.py`'s
+25-minute stale default both deployed); if Garmin starts answering 429,
+back off to `15min` and `SYNC_STALE_MINUTES` of about 40. Pull before deploying - a stale checkout copied over the server undoes
 whatever landed from elsewhere. Still open:
 
 - **The `/adventures` move to its own subdomain is still pending**; the DNS
