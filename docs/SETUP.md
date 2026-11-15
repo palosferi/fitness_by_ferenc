@@ -248,7 +248,7 @@ stored, and never known to you.
   `analysis/compare.py`; with an export of your own, rerun it and refit.
   Otherwise expect to tune the thresholds in `recommend_training()` after a
   couple of weeks of watching how the numbers track how you actually feel.
-- `fitness-sync.timer` runs every 30 minutes; that's frequent enough for
+- `fitness-sync.timer` runs every 10 minutes; that's frequent enough for
   strain to visibly climb through the day without hammering Garmin's servers.
 - The session cookie is named after `URL_PREFIX` rather than Flask's default
   `session`, so that two instances sharing a hostname can't overwrite each

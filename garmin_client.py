@@ -36,7 +36,7 @@ class GarminNotLinked(RuntimeError):
 
     Distinct from a login *failure* because the fix is different: somebody
     has to sign in through the setup page again, and until they do there is
-    no point retrying every 30 minutes.
+    no point retrying every 10 minutes.
     """
 
 
@@ -68,7 +68,7 @@ def get_client():
     when its tokens eventually expire there is nothing to fall back to.
     Raising GarminNotLinked rather than letting the library fail on an empty
     password is what lets sync.py put a "sign in again" notice on the
-    dashboard instead of erroring into the journal twice an hour.
+    dashboard instead of erroring into the journal every ten minutes.
     """
     has_credentials = bool(config.GARMIN_EMAIL and config.GARMIN_PASSWORD)
     if not has_credentials and not has_stored_session():

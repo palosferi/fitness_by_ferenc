@@ -77,7 +77,7 @@ def run():
     except GarminNotLinked as exc:
         # Nothing to retry against - an instance set up through the web page
         # has no stored password to fall back on. Exit non-zero so the timer
-        # shows as failed rather than quietly doing nothing twice an hour.
+        # shows as failed rather than quietly doing nothing every ten minutes.
         _record_link_state("needs_login")
         log.error("%s Reconnect at /setup.", exc)
         raise SystemExit(1)

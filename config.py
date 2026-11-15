@@ -56,8 +56,8 @@ ACWR_RISK_THRESHOLD_PERCENT = int(os.environ.get("ACWR_RISK_THRESHOLD_PERCENT", 
 
 # If the last sync is older than this, the dashboard/widget show a "stale"
 # notice instead of quietly displaying old numbers. Default is 2.5x the
-# 30-minute sync timer interval, so a single missed/slow run doesn't flap it.
-SYNC_STALE_MINUTES = int(os.environ.get("SYNC_STALE_MINUTES", "75"))
+# 10-minute sync timer interval, so a single missed/slow run doesn't flap it.
+SYNC_STALE_MINUTES = int(os.environ.get("SYNC_STALE_MINUTES", "25"))
 
 # A stretch this long with no heart rate puts a "log what you did" reminder
 # on the dashboard - for sessions the watch can't come to (basketball,

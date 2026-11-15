@@ -7,7 +7,7 @@ by plain, documented formulas.
 ## What it does
 
 - Pulls HR, HRV, sleep, and steps from Garmin Connect (unofficial API).
-- Computes, every 30 minutes:
+- Computes, every 10 minutes:
   - **Strain** (1-100) - Edwards TRIMP from intraday heart rate, log-scaled
     against your own trailing training load.
   - **Sleep score** (1-100) - Garmin's own score when available, else a
